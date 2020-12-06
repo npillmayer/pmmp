@@ -7,6 +7,7 @@ require (
 	github.com/emirpasic/gods v1.12.0
 	github.com/lucasb-eyer/go-colorful v1.0.3
 	github.com/npillmayer/arithm v0.0.0-20201205232234-0c0b84ed8d47
+	github.com/npillmayer/gorgo v0.0.0-20201204221716-78b66f4dacf6
 	github.com/npillmayer/schuko v0.0.0-20201204202054-953994f422ef
 	github.com/npillmayer/tyse v0.0.0-20201206125211-6624d50f2061
 	github.com/shopspring/decimal v1.2.0
