@@ -1,6 +1,4 @@
-# pmmp
-
-Poor Man's MetaPost
+## Poor Man's MetaPost
 
 This is an experimental fun project, currently without any practical purpose.
 The first draft used ANTLR as a parser generator, but I intend to migrate it
