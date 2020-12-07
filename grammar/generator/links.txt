@@ -1,0 +1,4 @@
+https://users.encs.concordia.ca/~grogono/Writings/mpref.pdf
+
+https://www.tug.org/docs/metapost/mpman.pdf
+
