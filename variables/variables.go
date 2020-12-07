@@ -169,6 +169,8 @@ func TypeFromString(str string) VariableType {
 }
 
 /*
+VarDecl represents a variable declaration.
+
 MetaFont declares variables explicitly ("numeric x;") or dynamically
 ("x=1" ⟹ x is of type numeric). Dynamic variable use is permitted for
 numeric variables only. All other types must be declared. Declaration
@@ -185,30 +187,31 @@ Example:
    numeric x; x2r := 7; x.b := 77;
 
 Result:
+
   tag = "x"  of type NumericType ⟹ into symbol table of a scope
      +-- suffix ".b" of type ComplexSuffix         "x.b"
      +-- subscript "[]" of type ComplexArray:      "x[]"
          +--- suffix ".r" of type ComplexSuffix:  "x[].r"
 
 */
-type PMMPVarDecl struct { // this is a tag, an array-subtype, or a suffix
-	runtime.StdSymbol              // to use this we will have to override getName()
-	Parent            *PMMPVarDecl // e.g., x <- [] <- suffix(a)
-	BaseTag           *PMMPVarDecl // e.g., x // this pointer should never be nil
+type VarDecl struct { // this is a tag, an array-subtype, or a suffix
+	runtime.StdSymbol          // to use this we will have to override getName()
+	Parent            *VarDecl // e.g., x <- [] <- suffix(a)
+	BaseTag           *VarDecl // e.g., x // this pointer should never be nil
 }
 
 // Expressive Stringer implementation.
-func (d *PMMPVarDecl) String() string {
+func (d *VarDecl) String() string {
 	return fmt.Sprintf("<decl %s/%s>", d.GetFullName(), TypeString(d.GetBaseType()))
 }
 
-func (d *PMMPVarDecl) Type() VariableType {
+func (d *VarDecl) Type() VariableType {
 	t := d.GetType()
 	return VariableType(t)
 }
 
 // Get isolated name of declaration partial (tag, array or suffix).
-func (d *PMMPVarDecl) GetName() string {
+func (d *VarDecl) GetName() string {
 	if d.Type() == ComplexArray {
 		return "[]"
 	} else if d.Type() == ComplexSuffix {
@@ -218,12 +221,12 @@ func (d *PMMPVarDecl) GetName() string {
 	}
 }
 
-/*
-Get the full name of a type declaration, starting with the base tag.
-x <- array <- suffix(a)  gives "x[].a", which is a bit more verbose
-than MetaFont's response. I prefer this one.
-*/
-func (d *PMMPVarDecl) GetFullName() string {
+// GetFullName gets
+// the full name of a type declaration, starting with the base tag.
+// x <- array <- suffix(a)  gives "x[].a", which is a bit more verbose
+// than MetaFont's response. I prefer this one.
+//
+func (d *VarDecl) GetFullName() string {
 	if d.Parent == nil {
 		return d.StdSymbol.GetName()
 	} else { // we are in a declaration for a complex type
@@ -243,14 +246,14 @@ func (d *PMMPVarDecl) GetFullName() string {
 }
 
 // Returns the type of the base tag.
-func (d *PMMPVarDecl) GetBaseType() VariableType {
+func (d *VarDecl) GetBaseType() VariableType {
 	return d.BaseTag.Type()
 }
 
 // Create and initialize a new variable type declaration.
 // This will be passed as a symbol-creator to the symbol table.
-func NewPMMPVarDecl(nm string) runtime.Symbol {
-	sym := &PMMPVarDecl{}
+func NewVarDecl(nm string) runtime.Symbol {
+	sym := &VarDecl{}
 	sym.Name = nm
 	sym.Symtype = int(Undefined)
 	sym.BaseTag = sym // this pointer should never be nil
@@ -258,17 +261,17 @@ func NewPMMPVarDecl(nm string) runtime.Symbol {
 	return sym
 }
 
-/*
-Convenience function to create and initialize a type declaration.
-Callers provide a (usually complex) type and an optional parent.
-If the parent is given and already has a child / suffix-partial with
-the same signature as the one to create, this function will not create
-a new partial, but provide the existing one.
-*/
-func CreatePMMPVarDecl(nm string, tp VariableType, parent *PMMPVarDecl) *PMMPVarDecl {
+// CreateVarDecls is a
+// convenience function to create and initialize a type declaration.
+// Callers provide a (usually complex) type and an optional parent.
+// If the parent is given and already has a child / suffix-partial with
+// the same signature as the one to create, this function will not create
+// a new partial, but provide the existing one.
+//
+func CreateVarDecl(nm string, tp VariableType, parent *VarDecl) *VarDecl {
 	if parent != nil { // check if already exists as child of parent
 		if parent.GetFirstChild() != nil {
-			ch := parent.GetFirstChild().(*PMMPVarDecl)
+			ch := parent.GetFirstChild().(*VarDecl)
 			for ch != nil { // as long as there are children, i.e. partials
 				if (tp == ComplexSuffix && ch.GetName() == nm) ||
 					(ch.Type() == ComplexArray && tp == ComplexArray) {
@@ -276,14 +279,14 @@ func CreatePMMPVarDecl(nm string, tp VariableType, parent *PMMPVarDecl) *PMMPVar
 					return ch // we're done
 				}
 				if c := ch.GetSibling(); c != nil { // move ch = ch->sibling
-					ch = c.(*PMMPVarDecl)
+					ch = c.(*VarDecl)
 				} else {
 					ch = nil
 				}
 			}
 		}
 	}
-	sym := NewPMMPVarDecl(nm).(*PMMPVarDecl) // not found, create a new one
+	sym := NewVarDecl(nm).(*VarDecl) // not found, create a new one
 	sym.Symtype = int(tp)
 	T().P("decl", sym.GetFullName()).Debugf("variable type declaration created")
 	if parent != nil {
@@ -292,12 +295,11 @@ func CreatePMMPVarDecl(nm string, tp VariableType, parent *PMMPVarDecl) *PMMPVar
 	return sym
 }
 
-/*
-Append a complex type partial (suffix or array) to a parent identifier.
-Will not append the partial, if a partial with this name already
-exists (as a child).
-*/
-func (d *PMMPVarDecl) AppendToVarDecl(v *PMMPVarDecl) *PMMPVarDecl {
+// AppendToVarDecl appends a complex type partial (suffix or array) to a parent identifier.
+// Will not append the partial, if a partial with this name already
+// exists (as a child).
+//
+func (d *VarDecl) AppendToVarDecl(v *VarDecl) *VarDecl {
 	if v == nil {
 		panic("attempt to append type declaration to nil-tag")
 	}
@@ -313,71 +315,71 @@ func (d *PMMPVarDecl) AppendToVarDecl(v *PMMPVarDecl) *PMMPVarDecl {
 }
 
 // Show the variable declarations for a tag.
-func (d *PMMPVarDecl) ShowDeclarations(s *bytes.Buffer) *bytes.Buffer {
+func (d *VarDecl) ShowDeclarations(s *bytes.Buffer) *bytes.Buffer {
 	if s == nil {
 		s = new(bytes.Buffer)
 	}
 	s.WriteString(fmt.Sprintf("%s : %s\n", d.GetFullName(), TypeString(d.BaseTag.GetBaseType())))
 	ch := d.GetFirstChild()
 	for ; ch != nil; ch = ch.GetSibling() {
-		s = ch.(*PMMPVarDecl).ShowDeclarations(s)
+		s = ch.(*VarDecl).ShowDeclarations(s)
 	}
 	return s
 }
 
 // check interface assignability
-var _ runtime.Symbol = &PMMPVarDecl{}
-var _ runtime.Typable = &PMMPVarDecl{}
-var _ runtime.TreeNode = &PMMPVarDecl{}
+var _ runtime.Symbol = &VarDecl{}
+var _ runtime.Typable = &VarDecl{}
+var _ runtime.TreeNode = &VarDecl{}
 
 // === Variable References / Usage ===========================================
 
-/*
-Variable reference look like "x", "x2", "hello.world" or "a[4.32].b".
-Variable references always refer to variable declarations (see code
-segments above.), which define the type and structure of the variable.
-
-The declaration may have partials of type subscript. For every such
-partial the reference needs a decimal subscript, which we will store
-in an array of subscripts.
-
-Example:
-
-   x[2.8].b[1] => subscripts = [2.8, 1]
-
-Variable references can have a value (of type interface{}).
-*/
-type PMMPVarRef struct {
+// VarRef is a varibale reference.
+// Variable reference look like "x", "x2", "hello.world" or "a[4.32].b".
+// Variable references always refer to variable declarations (see code
+// segments above.), which define the type and structure of the variable.
+//
+// The declaration may have partials of type subscript. For every such
+// partial the reference needs a decimal subscript, which we will store
+// in an array of subscripts.
+//
+// Example:
+//
+//     x[2.8].b[1] => subscripts = [2.8, 1]
+//
+// Variable references can have a value (of type interface{}).
+//
+type VarRef struct {
 	runtime.StdSymbol               // store by normalized name
 	cachedName        string        // store full name
-	Decl              *PMMPVarDecl  // type declaration for this variable
+	Decl              *VarDecl      // type declaration for this variable
 	subscripts        []dec.Decimal // list of subscripts, first to last
 	Value             interface{}   // if known: has a value (numeric, pair, path, ...)
 }
 
-/*
-Variables of type pair will use two sub-symbols for the x-part and
-y-part of the pair respectively. We will connect them using the
-sibling-link (x-part) and child-link (y-part) of the PMMPVarRef.
-Both parts link back to the pair variable.
-
-We need a different serial ID for the y-part, as it will be used as a
-variable index in a system of linear equations LEQ. Otherwise x-part and
-y-part would not be distinguishable for the LEQ.
-*/
+// PairPartRef are either xpart or ypart of a pair.
+// Variables of type pair will use two sub-symbols for the x-part and
+// y-part of the pair respectively. We will connect them using the
+// sibling-link (x-part) and child-link (y-part) of the VarRef.
+// Both parts link back to the pair variable.
+//
+// We need a different serial ID for the y-part, as it will be used as a
+// variable index in a system of linear equations LEQ. Otherwise x-part and
+// y-part would not be distinguishable for the LEQ.
+//
 type PairPartRef struct {
 	Id      int         // serial ID
-	Pairvar *PMMPVarRef // pair parent
+	Pairvar *VarRef     // pair parent
 	Value   interface{} // if known: has a value (numeric)
 }
 
 // Create a variable reference. Low level method.
-func CreatePMMPVarRef(decl *PMMPVarDecl, value interface{}, indices []dec.Decimal) *PMMPVarRef {
+func CreateVarRef(decl *VarDecl, value interface{}, indices []dec.Decimal) *VarRef {
 	if decl.GetBaseType() == PairType {
 		return CreatePMMPPairTypeVarRef(decl, value, indices)
 	} else {
 		T().Debugf("creating %s var for %v", TypeString(decl.Type()), decl)
-		v := &PMMPVarRef{
+		v := &VarRef{
 			Decl:       decl,
 			subscripts: indices,
 			Value:      value,
@@ -390,9 +392,9 @@ func CreatePMMPVarRef(decl *PMMPVarDecl, value interface{}, indices []dec.Decima
 }
 
 // Create a pair variable reference. Low level method.
-func CreatePMMPPairTypeVarRef(decl *PMMPVarDecl, value interface{}, indices []dec.Decimal) *PMMPVarRef {
+func CreatePMMPPairTypeVarRef(decl *VarDecl, value interface{}, indices []dec.Decimal) *VarRef {
 	T().Debugf("creating pair var for %v", decl)
-	v := &PMMPVarRef{
+	v := &VarRef{
 		Decl:       decl,
 		subscripts: indices,
 		Value:      value,
@@ -420,24 +422,23 @@ func CreatePMMPPairTypeVarRef(decl *PMMPVarDecl, value interface{}, indices []de
 
 // Symbol-creator for symbol table: creates tag symbol.
 // Do not use this for pair variables !!
-func NewPMMPVarRef(tagName string) runtime.Symbol {
+func NewVarRef(tagName string) runtime.Symbol {
 	T().P("tag", tagName).Debugf("tag for variable reference created")
-	v := &PMMPVarRef{}
+	v := &VarRef{}
 	v.Id = newVarSerial()
 	return v
 }
 
 // Expressive Stringer implementation.
-func (v *PMMPVarRef) String() string {
+func (v *VarRef) String() string {
 	return fmt.Sprintf("<var %s=%v w/ %s>", v.GetFullName(), v.Value, v.Decl)
 }
 
-/*
-This method returns the full nomalized name, i.e. "x[2].r".
-This enables us to store the variable in a symbol table.
-Overrides GetName() of interface Symbol.
-*/
-func (v *PMMPVarRef) GetName() string {
+// GetName returns the full nomalized name, i.e. "x[2].r".
+// This enables us to store the variable in a symbol table.
+// Overrides GetName() of interface Symbol.
+//
+func (v *VarRef) GetName() string {
 	if len(v.cachedName) == 0 {
 		v.cachedName = v.GetFullName()
 	}
@@ -445,18 +446,18 @@ func (v *PMMPVarRef) GetName() string {
 }
 
 // Type returns the variable's type.
-func (v *PMMPVarRef) Type() VariableType {
+func (v *VarRef) Type() VariableType {
 	if v.Decl != nil {
 		return v.Decl.GetBaseType()
 	}
 	return Undefined
 }
 
-/*
-Strip the base tag string off of a variable and return all the suffxies
-as string.
-*/
-func (v *PMMPVarRef) GetSuffixesString() string {
+// GetSuffixesString returns a variable's name without the leading base tag name.
+// Strip the base tag string off of a variable and return all the suffxies
+// as string.
+//
+func (v *VarRef) GetSuffixesString() string {
 	basetag := v.Decl.BaseTag
 	basetagstring := basetag.GetName()
 	fullstring := v.GetFullName()
@@ -465,11 +466,11 @@ func (v *PMMPVarRef) GetSuffixesString() string {
 
 // --- Variable Type Pair ----------------------------------------------------
 
-/*
-Pair parts (x-part or y-part) return the name of their parent pair symbol,
-prepending "xpart" or "ypart" respectively. This name is constant and
-may be used to store the pair part in a symbol table.
-*/
+// GetName returns a string for a pair part.
+// Pair parts (x-part or y-part) return the name of their parent pair symbol,
+// prepending "xpart" or "ypart" respectively. This name is constant and
+// may be used to store the pair part in a symbol table.
+//
 func (ppart *PairPartRef) GetName() string {
 	if ppart.Pairvar.GetID() == ppart.GetID() {
 		return "xpart " + ppart.Pairvar.GetName()
@@ -489,12 +490,12 @@ func (ppart *PairPartRef) Type() VariableType {
 }
 
 // Predicate: is this variable of type pair?
-func (v *PMMPVarRef) IsPair() bool {
+func (v *VarRef) IsPair() bool {
 	return v.Type() == PairType
 }
 
 // Get the x-part of a pair variable
-func (v *PMMPVarRef) XPart() *PairPartRef {
+func (v *VarRef) XPart() *PairPartRef {
 	if !v.IsPair() {
 		T().P("var", v.GetName()).Errorf("cannot access x-part of non-pair")
 		return nil
@@ -503,7 +504,7 @@ func (v *PMMPVarRef) XPart() *PairPartRef {
 }
 
 // Get the y-part of a pair variable
-func (v *PMMPVarRef) YPart() *PairPartRef {
+func (v *VarRef) YPart() *PairPartRef {
 	if !v.IsPair() {
 		T().P("var", v.GetName()).Errorf("cannot access y-part of non-pair")
 		return nil
@@ -553,7 +554,8 @@ func (ppart *PairPartRef) SetFirstChild(tn runtime.TreeNode) {
 // Get the full normalized (canonical) name of a variable,  i.e.
 //
 //    "x[2].r".
-func (v *PMMPVarRef) GetFullName() string {
+//
+func (v *VarRef) GetFullName() string {
 	var suffixes []string
 	d := v.Decl
 	if d == nil {
@@ -578,13 +580,13 @@ func (v *PMMPVarRef) GetFullName() string {
 	return strings.Join(suffixes, "")
 }
 
-// Interface runtime.Assignable
-func (v *PMMPVarRef) GetValue() interface{} {
+// GetValue satisfies interface runtime.Assignable
+func (v *VarRef) GetValue() interface{} {
 	return v.Value
 }
 
-// Interface runtime.Assignable
-func (v *PMMPVarRef) SetValue(val interface{}) {
+// SetValue satisfies interface runtime.Assignable
+func (v *VarRef) SetValue(val interface{}) {
 	T().P("var", v.GetName()).Debugf("new value: %v", val)
 	v.Value = val
 	if v.IsPair() {
@@ -601,12 +603,12 @@ func (v *PMMPVarRef) SetValue(val interface{}) {
 	}
 }
 
-/*
-Whenever a pair part (x-part or y-part) is set, it sends a message to
-the parent pair variable to pull the value. If both parts are known and
-a numeric value is set, the parent pair creates a combined pair value.
-*/
-func (v *PMMPVarRef) PullValue() {
+// PullValue pulls a variable's value up to a containig pair variable.
+// Whenever a pair part (x-part or y-part) is set, it sends a message to
+// the parent pair variable to pull the value. If both parts are known and
+// a numeric value is set, the parent pair creates a combined pair value.
+//
+func (v *VarRef) PullValue() {
 	if v.IsPair() {
 		var ppart1, ppart2 *PairPartRef
 		ppart1 = v.GetSibling().(*PairPartRef)
@@ -628,7 +630,7 @@ func (v *PMMPVarRef) PullValue() {
 Get the value of a variable as a string, if known. Otherwise return
 the tag name or type, depending on the variable type.
 */
-func (v *PMMPVarRef) ValueString() string {
+func (v *VarRef) ValueString() string {
 	if v.IsPair() {
 		var xvalue, yvalue string
 		xpart := v.XPart().Value
@@ -659,7 +661,7 @@ func (v *PMMPVarRef) ValueString() string {
 }
 
 // Interface runtime.Assignable
-func (v *PMMPVarRef) IsKnown() bool {
+func (v *VarRef) IsKnown() bool {
 	return (v.Value != nil)
 }
 
@@ -672,7 +674,7 @@ while the out-of-scope variable lives on with the old serial.
 
 Returns the old serial ID.
 */
-func (v *PMMPVarRef) Reincarnate() int {
+func (v *VarRef) Reincarnate() int {
 	oldserial := v.GetID()
 	v.Id = newVarSerial()
 	if v.IsPair() {
@@ -694,10 +696,10 @@ func newVarSerial() int {
 }
 
 // check interface assignability
-var _ runtime.Symbol = &PMMPVarRef{}
-var _ runtime.Typable = &PMMPVarRef{}
-var _ runtime.TreeNode = &PMMPVarRef{}
-var _ runtime.Assignable = &PMMPVarRef{}
+var _ runtime.Symbol = &VarRef{}
+var _ runtime.Typable = &VarRef{}
+var _ runtime.TreeNode = &VarRef{}
+var _ runtime.Assignable = &VarRef{}
 
 var _ runtime.Symbol = &PairPartRef{}
 var _ runtime.TreeNode = &PairPartRef{}
