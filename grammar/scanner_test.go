@@ -13,8 +13,11 @@ func TestScanner(t *testing.T) {
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
-	lex, _ := Lexer()
-	input := `begingroup boolean 1 "hello" a.l 1/23 ; % ignored`
+	lex, err := Lexer()
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+	input := `begingroup boolean 1 "hello" a.l 1/23 ** ... ; % ignored`
 	scan, err := lex.Scanner(input)
 	if err != nil {
 		t.Errorf(err.Error())
@@ -36,4 +39,5 @@ func TestScanner(t *testing.T) {
 	if cnt != 7 {
 		t.Errorf("Expected input to be split into 7 tokens, got %d", cnt)
 	}
+	t.Fail()
 }

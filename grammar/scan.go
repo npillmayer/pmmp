@@ -77,12 +77,13 @@ var nullOps = []string{
 	"false", "normaldeviate", "nullpen", "nullpicture",
 	"pencircle", "true", "whatever",
 }
-var primOps = []string{"*", "/", "**", "and", "dotprod", "div", "mod"}
-var secOps = []string{"+", "-", "++", "+-+", "or", "intersectionpoint"}
+var primOps = []string{`\*`, `\/`, `\*\*`, "and", "dotprod", "div", "mod"}
+var secOps = []string{`\+`, `\-`, `\+\+`, `\+\-\+`, "or", "intersectionpoint"}
 var relOps = []string{
-	"=", "<", ">", "≤", "≥", "≠", "<=", ">=", "!=", "<>",
-	"&", "cutbefore", "cutafter",
+	`=`, `<`, `>`, `≤`, `≥`, `≠`, `<=`, `>=`, `!=`, `<>`,
+	`\&`, "cutbefore", "cutafter",
 }
+var assignOps = []string{`:=`, `←`}
 var ofOps = []string{
 	"arctime", "direction", "directiontime", "directionpoint", "penoffset",
 	"point", "postcontrol", "precontrol", "subpath", "substring",
@@ -98,7 +99,7 @@ var binTransf = []string{
 // The keyword tokens
 var keywords = []string{ // TODO
 	"of",
-	"--", "..", "...", "tension", "controls",
+	`\-\-`, `\.\.`, `\.\.\.`, "tension", "controls",
 	"begingroup", "endgroup",
 	"def", "vardef",
 	"picture", "end",
@@ -107,7 +108,6 @@ var keywords = []string{ // TODO
 // All of the tokens (including literals and keywords)
 var tokens = []string{
 	"COMMENT", "TAG", "NUMBER", "STRING",
-	"UNARY_OP", "SEC_OP", "TER_OP", "REL_OP",
 }
 
 // tokenIds will be set in initTokens()
@@ -117,11 +117,6 @@ var initOnce sync.Once // monitors one-time initialization
 
 func initTokens() {
 	initOnce.Do(func() {
-		// var toks []string
-		// toks = append(toks, tokens...)
-		// toks = append(toks, ops...)
-		// toks = append(toks, keywords...)
-		// toks = append(toks, literals...)
 		tokenIds = make(map[string]int)
 		tokenIds["COMMENT"] = scanner.Comment
 		tokenIds["TAG"] = scanner.Ident
@@ -134,32 +129,36 @@ func initTokens() {
 		for _, op := range nullOps {
 			tokenIds[op] = NullaryOp
 		}
-		// for _, op := range unaryOps {
-		// 	tokenIds[op] = UnaryOp
-		// }
-		// for _, op := range primOps {
-		// 	tokenIds[op] = PrimaryOp
-		// }
-		// for _, op := range secOps {
-		// 	tokenIds[op] = SecondaryOp
-		// }
-		// tokenIds[":="] = AssignOp
-		// tokenIds["←"] = AssignOp
-		// for _, op := range ofOps {
-		// 	tokenIds[op] = OfOp
-		// }
-		// for _, tr := range unTransf {
-		// 	tokenIds[tr] = UnaryTransform
-		// }
-		// for _, tr := range binTransf {
-		// 	tokenIds[tr] = BinaryTransform
-		// }
-		// for _, t := range types {
-		// 	tokenIds[t] = Type
-		// }
-		// for i, k := range keywords {
-		// 	tokenIds[k] = Keyword + i
-		// }
+		for _, op := range unaryOps {
+			tokenIds[op] = UnaryOp
+		}
+		for _, op := range primOps {
+			tokenIds[op] = PrimaryOp
+		}
+		for _, op := range secOps {
+			tokenIds[op] = SecondaryOp
+		}
+		for _, op := range relOps {
+			tokenIds[op] = RelationOp
+		}
+		for _, op := range assignOps {
+			tokenIds[op] = AssignOp
+		}
+		for _, op := range ofOps {
+			tokenIds[op] = OfOp
+		}
+		for _, tr := range unTransf {
+			tokenIds[tr] = UnaryTransform
+		}
+		for _, tr := range binTransf {
+			tokenIds[tr] = BinaryTransform
+		}
+		for _, t := range types {
+			tokenIds[t] = Type
+		}
+		for i, k := range keywords {
+			tokenIds[k] = Keyword + i
+		}
 	})
 }
 
@@ -180,24 +179,24 @@ func Lexer() (*scanner.LMAdapter, error) {
 		lexer.Add([]byte(`\"[^"]*\"`), makeToken("STRING"))
 		lexer.Add([]byte(`[\+\-]?[0-9]+(\.[0-9]+)?`), makeToken("NUMBER")) // float
 		lexer.Add([]byte(`[\+\-]?[0-9]+(\/[0-9]+)?`), makeToken("NUMBER")) // fraction
-		//lexer.Add([]byte(`([a-z]|[A-Z])+`), makeSymbol())
-		// lexer.Add([]byte(`([a-z]|[A-Z])+(\.([a-z|[A-Z])+)+`), makeSymbol())
-		lexer.Add([]byte(`([a-z]|[A-Z])+`), makeToken("TAG"))
-		lexer.Add([]byte(`([a-z]|[A-Z])+(\.([a-z|[A-Z])+)+`), makeToken("TAG"))
+		lexer.Add([]byte(`([a-z]|[A-Z])+`), makeSymbol())
+		lexer.Add([]byte(`([a-z]|[A-Z])+(\.([a-z|[A-Z])+)+`), makeSymbol())
+		// lexer.Add([]byte(`([a-z]|[A-Z])+`), makeToken("TAG"))
+		// lexer.Add([]byte(`([a-z]|[A-Z])+(\.([a-z|[A-Z])+)+`), makeToken("TAG"))
 		lexer.Add([]byte(`( |\t|\n|\r)+`), scanner.Skip) // skip whitespace
 	}
-	alltoks := append(literals, nullOps...)
-	// alltoks = append(alltoks, unaryOps...)
-	// alltoks = append(alltoks, primOps...)
-	// alltoks = append(alltoks, secOps...)
-	// alltoks = append(alltoks, relOps...)
-	// alltoks = append(alltoks, ofOps...)
-	// alltoks = append(alltoks, unTransf...)
-	// alltoks = append(alltoks, binTransf...)
-	// alltoks = append(alltoks, types...)
-	// alltoks = append(alltoks, keywords...)
-	T().Errorf("alltoks = %v", alltoks)
-	adapter, err := scanner.NewLMAdapter(init, alltoks, keywords, tokenIds)
+	alltoks := append(nullOps, unaryOps...)
+	alltoks = append(alltoks, primOps...)
+	alltoks = append(alltoks, secOps...)
+	alltoks = append(alltoks, relOps...)
+	alltoks = append(alltoks, assignOps...)
+	alltoks = append(alltoks, ofOps...)
+	alltoks = append(alltoks, unTransf...)
+	alltoks = append(alltoks, binTransf...)
+	alltoks = append(alltoks, types...)
+	alltoks = append(alltoks, keywords...)
+	T().Debugf("all keywords: %v", alltoks)
+	adapter, err := scanner.NewLMAdapter(init, literals, alltoks, tokenIds)
 	if err != nil {
 		return nil, err
 	}
@@ -215,12 +214,10 @@ func makeToken(s string) lexmachine.Action {
 func makeSymbol() lexmachine.Action {
 	return func(s *lex.Scanner, m *machines.Match) (interface{}, error) {
 		lexeme := string(m.Bytes)
-		T().Errorf("lexeme = %s", lexeme)
 		if t, ok := tokenIds[lexeme]; ok { // is a keyword
 			return s.Token(t, lexeme, m), nil
 		}
-		panic(fmt.Errorf("unknown token literal"))
-		//return s.Token(tokenIds["TAG"], lexeme, m), nil
+		return s.Token(tokenIds["TAG"], lexeme, m), nil
 	}
 }
 
