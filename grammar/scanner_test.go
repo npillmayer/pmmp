@@ -36,8 +36,7 @@ func TestScanner(t *testing.T) {
 			cnt++
 		}
 	}
-	if cnt != 7 {
-		t.Errorf("Expected input to be split into 7 tokens, got %d", cnt)
+	if cnt != 9 {
+		t.Errorf("Expected input to be split into 9 tokens, got %d", cnt)
 	}
-	t.Fail()
 }
