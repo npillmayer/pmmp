@@ -16,9 +16,12 @@ func MakeMetaPostGrammar() *lr.LRAnalysis {
 
 	b.LHS("primary").N("atom").End()
 	b.LHS("atom").N("variable").End()
-	b.LHS("atom").N("number_or_fraction").End()
-	b.LHS("number_or_fraction").T("1", 49).End()
-	b.LHS("variable").T("x", 120).End()
+	b.LHS("atom").T(S("NUMBER")).End()
+	b.LHS("variable").T(S("TAG")).N("suffix").End()
+	b.LHS("suffix").Epsilon()
+	b.LHS("suffix").N("suffix").N("subscript").End()
+	b.LHS("suffix").N("suffix").T(S("TAG")).End()
+	b.LHS("subscript").T(S("NUMBER")).End()
 
 	g, err := b.Grammar()
 	if err != nil {

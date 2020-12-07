@@ -11,5 +11,7 @@ require (
 	github.com/npillmayer/schuko v0.0.0-20201204202054-953994f422ef
 	github.com/npillmayer/tyse v0.0.0-20201206125211-6624d50f2061
 	github.com/shopspring/decimal v1.2.0
+	github.com/timtadh/lexmachine v0.2.2
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
+	golang.org/x/text v0.3.4
 )
