@@ -7,12 +7,10 @@ import (
 	"testing"
 
 	"github.com/antlr/antlr4/runtime/Go/antlr"
-	"github.com/npillmayer/pmmp/runtime"
+	"github.com/npillmayer/gorgo/runtime"
 	"github.com/npillmayer/pmmp/variables"
-	"github.com/npillmayer/pmmp/variables/varparse"
-	"github.com/npillmayer/schuko/tracing"
+	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing/gologadapter"
-	"github.com/shopspring/decimal"
 )
 
 type TestingErrorListener struct {
@@ -43,54 +41,58 @@ func checkErr(t *testing.T) {
 
 // Init the global tracers.
 func TestInit0(t *testing.T) {
-	tracing.InterpreterTracer = gologadapter.New()
-	tracing.SyntaxTracer = gologadapter.New()
+	gtrace.InterpreterTracer = gologadapter.New()
+	gtrace.SyntaxTracer = gologadapter.New()
 }
 
 func TestVarDecl1(t *testing.T) {
-	symtab := runtime.NewSymbolTable(variables.NewPMMPVarDecl)
-	symtab.DefineSymbol("x")
+	symtab := runtime.NewSymbolTable()
+	symtab.DefineTag("x")
 }
 
 func TestVarDecl2(t *testing.T) {
-	symtab := runtime.NewSymbolTable(variables.NewPMMPVarDecl)
-	x, _ := symtab.DefineSymbol("x")
-	variables.CreatePMMPVarDecl("r", variables.ComplexSuffix, x.(*variables.PMMPVarDecl))
+	symtab := runtime.NewSymbolTable()
+	x := variables.NewVarDecl("x")
+	symtab.InsertTag(x.Tag())
+	variables.CreateSuffix("r", variables.SuffixType, x.AsSuffix())
 }
 
+/*
 func TestVarDecl3(t *testing.T) {
-	symtab := runtime.NewSymbolTable(variables.NewPMMPVarDecl)
-	x, _ := symtab.DefineSymbol("x")
-	var v *variables.PMMPVarDecl = x.(*variables.PMMPVarDecl)
-	variables.CreatePMMPVarDecl("r", variables.ComplexSuffix, v)
-	arr := variables.CreatePMMPVarDecl("<array>", variables.ComplexArray, x.(*variables.PMMPVarDecl))
-	variables.CreatePMMPVarDecl("a", variables.ComplexSuffix, arr)
+	symtab := runtime.NewSymbolTable()
+	x, _ := symtab.DefineTag("x")
+	var v *variables.VarDecl = x.(*variables.VarDecl)
+	variables.CreateVarDecl("r", variables.ComplexSuffix, v)
+	arr := variables.CreateVarDecl("<array>", variables.ComplexArray, x.(*variables.VarDecl))
+	variables.CreateVarDecl("a", variables.ComplexSuffix, arr)
 	//var b *bytes.Buffer
 	//b = v.ShowVariable(b)
 	//fmt.Printf("## showvariable %s;\n%s\n", v.BaseTag.GetName(), b.String())
 }
 
 func TestVarRef1(t *testing.T) {
-	x := variables.CreatePMMPVarDecl("x", variables.NumericType, nil)
-	var v *variables.PMMPVarRef = variables.CreatePMMPVarRef(x, 1, nil)
+	x := variables.CreateVarDecl("x", variables.NumericType, nil)
+	var v *variables.VarRef = variables.CreateVarRef(x, 1, nil)
 	t.Logf("var ref: %v\n", v)
 }
 
 func TestVarRef2(t *testing.T) {
-	x := variables.CreatePMMPVarDecl("x", variables.NumericType, nil)
-	r := variables.CreatePMMPVarDecl("r", variables.ComplexSuffix, x)
-	var v *variables.PMMPVarRef = variables.CreatePMMPVarRef(r, 1, nil)
+	x := variables.CreateVarDecl("x", variables.NumericType, nil)
+	r := variables.CreateVarDecl("r", variables.ComplexSuffix, x)
+	var v *variables.VarRef = variables.CreateVarRef(r, 1, nil)
 	t.Logf("var ref: %v\n", v)
 }
 
 func TestVarRef3(t *testing.T) {
-	x := variables.CreatePMMPVarDecl("x", variables.NumericType, nil)
-	arr := variables.CreatePMMPVarDecl("<[]>", variables.ComplexArray, x)
+	x := variables.CreateVarDecl("x", variables.NumericType, nil)
+	arr := variables.CreateVarDecl("<[]>", variables.ComplexArray, x)
 	subs := []decimal.Decimal{decimal.New(7, 0)}
-	var v *variables.PMMPVarRef = variables.CreatePMMPVarRef(arr, 7, subs)
+	var v *variables.VarRef = variables.CreateVarRef(arr, 7, subs)
 	t.Logf("var ref: %v\n", v)
 }
+*/
 
+/*
 func TestVarRefParser1(t *testing.T) {
 	listener.ParseVariableFromString("x@", newErrL())
 	checkErr(t)
@@ -120,3 +122,4 @@ func TestVarRefParser6(t *testing.T) {
 	listener.ParseVariableFromString("x1a[2]b@", newErrL())
 	checkErr(t)
 }
+*/

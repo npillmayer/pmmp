@@ -1,82 +1,3 @@
-/*
-Package variables implements variables for programming languages similar
-to those in MetaFont and MetaPost.
-
-Variables are complex things in MetaFont/MetaPost. These are legal:
-
-   metafont> showvariable x;
-   x=1
-   x[]=numeric
-   x[][]=numeric
-   x[][][]=numeric
-   x[][][][]=numeric
-   x[]r=numeric
-   x[]r[]=numeric
-   ...
-
-Identifier-strings are called "tags". In the example above, 'x' is a tag
-and 'r' is a suffix.
-
-Array variables may be referenced without brackets, if the subscript is just
-a numeric literal, i.e. x[2]r and x2r refer to the same variable. We do
-not rely on the parser to decipher these kinds of variable names for us,
-but rather break up x2r16a => x[2]r[16]a by hand. However, the parser will
-split up array indices in brackets, for the subscript may be a complex expression
-("x[ypart ((8,5) rotated 20)]" is a valid expression in MetaFont).
-Things are further complicated by the fact that subscripts are allowed to
-be decimals: x[1.2] is valid, and may be typed "x1.2".
-
-   metafont> x[ypart ((8,5) rotated 20)] = 1;
-   ## x7.4347=1
-
-I don't know if this makes sense in practice, but let's try to implement it --
-it might be fun!
-
-I did reject some of MetaFont's conventions, however, for the sake of simlicity:
-Types are inherited from the tag, i.e. if x is of type numeric, then x[2]r is
-of type numeric, too. This is different from MetaFont, where x2r may be of a
-different type than x2. Nevertheless, I'll stick to my interpretation,
-which I find less confusing.
-
-The implementation currently is tightly coupled to the ANTLR V4 parser
-generator. Using ANTLR vor this task is a bit of overkill. Maybe I'll
-some day write a recursive descent parser from scratch as a substitute.
-
-
-BSD License
-
-Copyright (c) 2017, Norbert Pillmayer
-
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions
-are met:
-
-1. Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright
-notice, this list of conditions and the following disclaimer in the
-documentation and/or other materials provided with the distribution.
-
-3. Neither the name of Norbert Pillmayer nor the names of its contributors
-may be used to endorse or promote products derived from this software
-without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-*/
 package variables
 
 import (
@@ -85,17 +6,14 @@ import (
 	"strings"
 
 	"github.com/npillmayer/arithm"
-	"github.com/npillmayer/pmmp/runtime"
+	"github.com/npillmayer/gorgo/runtime"
+	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing"
-	dec "github.com/shopspring/decimal"
 )
 
-//go:generate antlr -Dlanguage=Go -o grammar -package grammar -Werror PMMPVar.g4
-//go:generate sh tagdoc.sh
-
-// We're tracing to the InterpreterTracer
+// T traces to the global syntax tracer
 func T() tracing.Trace {
-	return tracing.InterpreterTracer
+	return gtrace.SyntaxTracer
 }
 
 // === Variable Type Declarations ============================================
@@ -114,12 +32,12 @@ const (
 	BoxType
 	FrameType
 	VardefType
-	ComplexArray
-	ComplexSuffix
+	SubscriptType
+	SuffixType
 )
 
-// Helper: get a type as string
-func TypeString(vt VariableType) string {
+// TypeString returns a type as string.
+func (vt VariableType) String() string {
 	switch vt {
 	case Undefined:
 		return "<undefined>"
@@ -139,15 +57,15 @@ func TypeString(vt VariableType) string {
 		return "frame"
 	case VardefType:
 		return "vardef"
-	case ComplexArray:
+	case SubscriptType:
 		return "[]"
-	case ComplexSuffix:
+	case SuffixType:
 		return "<suffix>"
 	}
 	return fmt.Sprintf("<illegal type: %d>", vt)
 }
 
-// Helper: get a type from a string
+// TypeFromString gets a type from a string.
 func TypeFromString(str string) VariableType {
 	switch str {
 	case "numeric":
@@ -189,155 +107,176 @@ Example:
 Result:
 
   tag = "x"  of type NumericType ⟹ into symbol table of a scope
-     +-- suffix ".b" of type ComplexSuffix         "x.b"
-     +-- subscript "[]" of type ComplexArray:      "x[]"
-         +--- suffix ".r" of type ComplexSuffix:  "x[].r"
+     +-- suffix ".b" of type SuffixType         "x.b"
+     +-- subscript "[]" of type SubscriptType:      "x[]"
+         +--- suffix ".r" of type SuffixType:  "x[].r"
 
 */
 type VarDecl struct { // this is a tag, an array-subtype, or a suffix
-	runtime.StdSymbol          // to use this we will have to override getName()
-	Parent            *VarDecl // e.g., x <- [] <- suffix(a)
-	BaseTag           *VarDecl // e.g., x // this pointer should never be nil
+	Suffix
+	tag *runtime.Tag // declared tag
 }
 
-// Expressive Stringer implementation.
+// Suffix is a variable suffix (subscript or tag)
+type Suffix struct {
+	name        string
+	isSubscript bool
+	Parent      *Suffix
+	Sibling     *Suffix
+	Suffixes    *Suffix
+	baseDecl    *VarDecl
+}
+
+// NewVarDecl creates and initialize a new variable type declaration.
+func NewVarDecl(nm string) *VarDecl {
+	decl := &VarDecl{}
+	decl.name = nm
+	decl.tag = runtime.NewTag(nm).WithType(int8(Undefined))
+	decl.tag.UData = decl
+	decl.baseDecl = decl // this pointer should never be nil
+	T().P("decl", decl.FullName()).Debugf("atomic variable type declaration created")
+	return decl
+}
+
+// Tag returns the variable declaration as a tag (for symbol tables).
+func (d *VarDecl) Tag() *runtime.Tag {
+	return d.tag
+}
+
+func VarDeclFromTag(tag *runtime.Tag) *VarDecl {
+	return tag.UData.(*VarDecl)
+}
+
+func (d *VarDecl) AsSuffix() *Suffix {
+	return &d.Suffix
+}
+
 func (d *VarDecl) String() string {
-	return fmt.Sprintf("<decl %s/%s>", d.GetFullName(), TypeString(d.GetBaseType()))
+	return fmt.Sprintf("<decl %s/%s>", d.FullName(), d.GetBaseType().String())
 }
 
-func (d *VarDecl) Type() VariableType {
-	t := d.GetType()
-	return VariableType(t)
+// IsBaseDecl is a prediacte: is this suffix the base tag?
+func (s *Suffix) IsBaseDecl() bool {
+	return s.Parent == nil
 }
 
-// Get isolated name of declaration partial (tag, array or suffix).
-func (d *VarDecl) GetName() string {
-	if d.Type() == ComplexArray {
+// Type returns the variable's type.
+func (s *Suffix) Type() VariableType {
+	return VariableType(s.baseDecl.tag.Type())
+}
+
+// Name gets the isolated name of declaration partial (tag, array or suffix).
+func (s *Suffix) Name() string {
+	if s.isSubscript {
 		return "[]"
-	} else if d.Type() == ComplexSuffix {
-		return "." + d.StdSymbol.GetName()
-	} else {
-		return d.StdSymbol.GetName()
+	} else if s.Parent != nil {
+		return "." + s.name
 	}
+	return s.name
 }
 
-// GetFullName gets
+// FullName gets
 // the full name of a type declaration, starting with the base tag.
 // x <- array <- suffix(a)  gives "x[].a", which is a bit more verbose
 // than MetaFont's response. I prefer this one.
 //
-func (d *VarDecl) GetFullName() string {
-	if d.Parent == nil {
-		return d.StdSymbol.GetName()
-	} else { // we are in a declaration for a complex type
-		var s bytes.Buffer
-		s.WriteString(d.Parent.GetFullName()) // recursive
-		t := d.Type()
-		if t == ComplexArray {
-			s.WriteString("[]")
-		} else if t == ComplexSuffix {
-			s.WriteString(".") // MetaFont suppresses this if following an array partial
-			s.WriteString(d.StdSymbol.GetName())
-		} else {
-			panic(fmt.Sprintf("illegal sub-type: %d", t))
-		}
-		return s.String()
+func (s *Suffix) FullName() string {
+	if s.Parent == nil {
+		return s.baseDecl.tag.Name
+	} // we are in a declaration for a complex type
+	var str bytes.Buffer
+	str.WriteString(s.Parent.FullName()) // recursive
+	//t := s.Type()
+	if s.isSubscript {
+		str.WriteString("[]")
+	} else {
+		str.WriteString(".") // MetaFont suppresses this if following a subscript partial
+		str.WriteString(s.name)
 	}
+	return str.String()
 }
 
-// Returns the type of the base tag.
-func (d *VarDecl) GetBaseType() VariableType {
-	return d.BaseTag.Type()
+// GetBaseType gets the type of the base tag.
+func (s *Suffix) GetBaseType() VariableType {
+	return s.baseDecl.Type()
 }
 
-// Create and initialize a new variable type declaration.
-// This will be passed as a symbol-creator to the symbol table.
-func NewVarDecl(nm string) runtime.Symbol {
-	sym := &VarDecl{}
-	sym.Name = nm
-	sym.Symtype = int(Undefined)
-	sym.BaseTag = sym // this pointer should never be nil
-	T().P("decl", sym.GetFullName()).Debugf("atomic variable type declaration created")
-	return sym
-}
-
-// CreateVarDecls is a
-// convenience function to create and initialize a type declaration.
+// CreateSuffix is a function to create and initialize a suffix to
+// a type declaration.
 // Callers provide a (usually complex) type and an optional parent.
 // If the parent is given and already has a child / suffix-partial with
 // the same signature as the one to create, this function will not create
 // a new partial, but provide the existing one.
 //
-func CreateVarDecl(nm string, tp VariableType, parent *VarDecl) *VarDecl {
+func CreateSuffix(nm string, tp VariableType, parent *Suffix) *Suffix {
 	if parent != nil { // check if already exists as child of parent
-		if parent.GetFirstChild() != nil {
-			ch := parent.GetFirstChild().(*VarDecl)
-			for ch != nil { // as long as there are children, i.e. partials
-				if (tp == ComplexSuffix && ch.GetName() == nm) ||
-					(ch.Type() == ComplexArray && tp == ComplexArray) {
-					T().P("decl", ch.GetFullName()).Debugf("variable type already declared")
+		if parent.Suffixes != nil {
+			ch := parent.Suffixes
+			for ch != nil { // check all direct suffixes
+				if (tp == SuffixType && ch.name == nm) ||
+					(ch.isSubscript && tp == SubscriptType) {
+					T().P("decl", ch.FullName()).Debugf("variable type already declared")
 					return ch // we're done
 				}
-				if c := ch.GetSibling(); c != nil { // move ch = ch->sibling
-					ch = c.(*VarDecl)
-				} else {
-					ch = nil
-				}
+				ch = ch.Sibling
 			}
 		}
 	}
-	sym := NewVarDecl(nm).(*VarDecl) // not found, create a new one
-	sym.Symtype = int(tp)
-	T().P("decl", sym.GetFullName()).Debugf("variable type declaration created")
-	if parent != nil {
-		sym.AppendToVarDecl(parent)
+	s := &Suffix{name: nm} // not found, create a new one
+	if parent != nil {     // append to parent suffix
+		s.AppendToSuffix(parent)
+	} else { // wrap into a var decl
+		d := NewVarDecl(nm)
+		d.Suffix = *s
+		s.baseDecl = d
 	}
-	return sym
-}
-
-// AppendToVarDecl appends a complex type partial (suffix or array) to a parent identifier.
-// Will not append the partial, if a partial with this name already
-// exists (as a child).
-//
-func (d *VarDecl) AppendToVarDecl(v *VarDecl) *VarDecl {
-	if v == nil {
-		panic("attempt to append type declaration to nil-tag")
-	}
-	t := d.Type()
-	if t != ComplexSuffix && t != ComplexArray {
-		panic(fmt.Sprintf("attempt to append simple type (%d) to tag", t))
-	}
-	d.BaseTag = v.BaseTag
-	d.Parent = v
-	v.AppendChild(d)
-	T().P("decl", d.GetFullName()).Debugf("new variable type declaration")
-	return d
-}
-
-// Show the variable declarations for a tag.
-func (d *VarDecl) ShowDeclarations(s *bytes.Buffer) *bytes.Buffer {
-	if s == nil {
-		s = new(bytes.Buffer)
-	}
-	s.WriteString(fmt.Sprintf("%s : %s\n", d.GetFullName(), TypeString(d.BaseTag.GetBaseType())))
-	ch := d.GetFirstChild()
-	for ; ch != nil; ch = ch.GetSibling() {
-		s = ch.(*VarDecl).ShowDeclarations(s)
-	}
+	T().P("decl", s.FullName()).Debugf("variable type decl suffix created")
 	return s
 }
 
-// check interface assignability
-var _ runtime.Symbol = &VarDecl{}
-var _ runtime.Typable = &VarDecl{}
-var _ runtime.TreeNode = &VarDecl{}
+// AppendToSuffix appends a complex type partial (suffix or array) to a parent identifier.
+// Will not append the partial, if a partial with this name already
+// exists (as a child).
+//
+func (s *Suffix) AppendToSuffix(parent *Suffix) *Suffix {
+	if parent == nil {
+		panic("attempt to append type declaration to nil-tag")
+	}
+	s.baseDecl = parent.baseDecl
+	s.Parent = parent
+	ch := parent.Suffixes
+	if ch == nil {
+		parent.Suffixes = s
+	} else {
+		for ch.Sibling != nil {
+			ch = ch.Sibling
+		}
+		ch.Sibling = s
+	}
+	T().P("decl", s.FullName()).Debugf("new variable type suffix declaration")
+	return s
+}
+
+// ShowDeclarations shows the variable declarations tree, usually starting at the
+// base tag (MetaFont 'show' command).
+func (s *Suffix) ShowDeclarations(b *bytes.Buffer) *bytes.Buffer {
+	if b == nil {
+		b = new(bytes.Buffer)
+	}
+	b.WriteString(fmt.Sprintf("%s : %s\n", s.FullName(), s.baseDecl.GetBaseType().String()))
+	ch := s.Suffixes
+	for ; ch != nil; ch = ch.Sibling {
+		b = ch.ShowDeclarations(b)
+	}
+	return b
+}
 
 // === Variable References / Usage ===========================================
 
 // VarRef is a varibale reference.
 // Variable reference look like "x", "x2", "hello.world" or "a[4.32].b".
-// Variable references always refer to variable declarations (see code
-// segments above.), which define the type and structure of the variable.
+// Variable references always refer to variable declarations (see
+// type VarDecl), which define the type and structure of the variable.
 //
 // The declaration may have partials of type subscript. For every such
 // partial the reference needs a decimal subscript, which we will store
@@ -350,97 +289,51 @@ var _ runtime.TreeNode = &VarDecl{}
 // Variable references can have a value (of type interface{}).
 //
 type VarRef struct {
-	runtime.StdSymbol               // store by normalized name
-	cachedName        string        // store full name
-	Decl              *VarDecl      // type declaration for this variable
-	subscripts        []dec.Decimal // list of subscripts, first to last
-	Value             interface{}   // if known: has a value (numeric, pair, path, ...)
+	runtime.Tag             // store by normalized name
+	cachedName  string      // store full name
+	Decl        *VarDecl    // type declaration for this variable
+	subscripts  []float64   // list of subscript value, first to last
+	Value       interface{} // if known: has a value (numeric, pair, path, ...)
 }
 
-// PairPartRef are either xpart or ypart of a pair.
-// Variables of type pair will use two sub-symbols for the x-part and
-// y-part of the pair respectively. We will connect them using the
-// sibling-link (x-part) and child-link (y-part) of the VarRef.
-// Both parts link back to the pair variable.
-//
-// We need a different serial ID for the y-part, as it will be used as a
-// variable index in a system of linear equations LEQ. Otherwise x-part and
-// y-part would not be distinguishable for the LEQ.
-//
-type PairPartRef struct {
-	Id      int         // serial ID
-	Pairvar *VarRef     // pair parent
-	Value   interface{} // if known: has a value (numeric)
-}
-
-// Create a variable reference. Low level method.
-func CreateVarRef(decl *VarDecl, value interface{}, indices []dec.Decimal) *VarRef {
+// CreateVarRef creates a variable reference. Low level method.
+func CreateVarRef(decl *VarDecl, value interface{}, indices []float64) *VarRef {
 	if decl.GetBaseType() == PairType {
-		return CreatePMMPPairTypeVarRef(decl, value, indices)
-	} else {
-		T().Debugf("creating %s var for %v", TypeString(decl.Type()), decl)
-		v := &VarRef{
-			Decl:       decl,
-			subscripts: indices,
-			Value:      value,
-		}
-		v.SetType(int(decl.GetBaseType()))
-		v.Id = newVarSerial() // TODO: check, when this is needed (now: id leak)
-		//T().Debugf("created var ref: subscripts = %v", indices)
-		return v
+		return CreatePairTypeVarRef(decl, value, indices)
 	}
-}
-
-// Create a pair variable reference. Low level method.
-func CreatePMMPPairTypeVarRef(decl *VarDecl, value interface{}, indices []dec.Decimal) *VarRef {
-	T().Debugf("creating pair var for %v", decl)
+	T().Debugf("creating %s var for %v", decl.Type().String(), decl)
 	v := &VarRef{
 		Decl:       decl,
 		subscripts: indices,
 		Value:      value,
 	}
-	v.SetType(int(PairType))
-	v.Id = newVarSerial() // TODO: check, when this is needed (now: id leak)
-	var pair arithmetic.Pair
-	var ok bool
-	ypart := &PairPartRef{
-		Id:      newVarSerial(),
-		Pairvar: v,
-	}
-	xpart := &PairPartRef{
-		Id:      v.Id,
-		Pairvar: v,
-	}
-	v.SetSibling(xpart)
-	v.SetFirstChild(ypart)
-	if pair, ok = value.(arithmetic.Pair); ok {
-		xpart.Value = pair.XPart()
-		ypart.Value = pair.YPart()
-	}
+	v.ChangeType(int8(decl.Type()))
+	v.ID = newVarSerial() // TODO: check, when this is needed (now: id leak)
+	//T().Debugf("created var ref: subscripts = %v", indices)
+	v.Tag.UData = v
 	return v
 }
 
-// Symbol-creator for symbol table: creates tag symbol.
+// NewVarRef is a creator for symbol table: creates tag symbol.
 // Do not use this for pair variables !!
-func NewVarRef(tagName string) runtime.Symbol {
-	T().P("tag", tagName).Debugf("tag for variable reference created")
-	v := &VarRef{}
-	v.Id = newVarSerial()
-	return v
-}
+// func NewVarRef(tagName string) *runtime.Tag {
+// 	T().P("tag", tagName).Debugf("tag for variable reference created")
+// 	v := &VarRef{}
+// 	v.ID = newVarSerial()
+// 	return v
+// }
 
-// Expressive Stringer implementation.
 func (v *VarRef) String() string {
-	return fmt.Sprintf("<var %s=%v w/ %s>", v.GetFullName(), v.Value, v.Decl)
+	return fmt.Sprintf("<var %s=%v w/ %s>", v.FullName(), v.Value, v.Decl)
 }
 
-// GetName returns the full nomalized name, i.e. "x[2].r".
+// Name returns the full nomalized name, i.e. "x[2].r".
 // This enables us to store the variable in a symbol table.
-// Overrides GetName() of interface Symbol.
+// Overrides Name of interface Symbol.
 //
-func (v *VarRef) GetName() string {
+func (v *VarRef) Name() string {
 	if len(v.cachedName) == 0 {
-		v.cachedName = v.GetFullName()
+		v.cachedName = v.FullName()
 	}
 	return v.cachedName
 }
@@ -453,63 +346,116 @@ func (v *VarRef) Type() VariableType {
 	return Undefined
 }
 
+func varFromTag(tag *runtime.Tag) *VarRef {
+	return tag.UData.(*VarRef)
+}
+
 // GetSuffixesString returns a variable's name without the leading base tag name.
 // Strip the base tag string off of a variable and return all the suffxies
 // as string.
 //
-func (v *VarRef) GetSuffixesString() string {
-	basetag := v.Decl.BaseTag
-	basetagstring := basetag.GetName()
-	fullstring := v.GetFullName()
-	return fullstring[len(basetagstring):]
-}
+// func (v *VarRef) GetSuffixesString() string {
+// 	basetag := v.Decl.baseDecl
+// 	basetagstring := basetag.Name
+// 	fullstring := v.FullName()
+// 	return fullstring[len(basetagstring):]
+// }
 
 // --- Variable Type Pair ----------------------------------------------------
 
-// GetName returns a string for a pair part.
+// PairPartRef are either xpart or ypart of a pair.
+//
+// Complications for pairs arise because we need each half of the pair
+// (x-part and y-part) as separate variables for the LEQ-solver.
+// Variables of type pair will use two sub-symbols for the x-part and
+// y-part of the pair respectively. We will connect them using the
+// sibling-link (x-part) and child-link (y-part) of the VarRef.
+// Both parts link back to the pair variable.
+//
+// We need a different serial ID for the y-part, as it will be used as a
+// variable index in a system of linear equations LEQ. Otherwise x-part and
+// y-part would not be distinguishable for the LEQ.
+//
+type PairPartRef struct {
+	runtime.Tag
+	ID      int32       // serial ID
+	Pairvar *VarRef     // pair parent
+	Value   interface{} // if known: has a value (numeric)
+}
+
+// CreatePairTypeVarRef creates a pair variable reference. Low level method.
+func CreatePairTypeVarRef(decl *VarDecl, value interface{}, indices []float64) *VarRef {
+	T().Debugf("creating pair var for %v", decl)
+	v := &VarRef{
+		Decl:       decl,
+		subscripts: indices,
+		Value:      value,
+	}
+	v.ChangeType(int8(PairType))
+	v.ID = newVarSerial() // TODO: check, when this is needed (now: id leak)
+	var pair arithm.Pair
+	var ok bool
+	ypart := &PairPartRef{
+		ID:      newVarSerial(),
+		Pairvar: v,
+	}
+	ypart.Tag.UData = ypart
+	xpart := &PairPartRef{
+		ID:      v.ID,
+		Pairvar: v,
+	}
+	xpart.Tag.UData = xpart
+	v.Sibling = &xpart.Tag
+	v.Children = &ypart.Tag
+	if pair, ok = value.(arithm.Pair); ok {
+		xpart.Value = pair.X
+		ypart.Value = pair.Y
+	}
+	return v
+}
+
+// Name returns a string for a pair part.
 // Pair parts (x-part or y-part) return the name of their parent pair symbol,
 // prepending "xpart" or "ypart" respectively. This name is constant and
 // may be used to store the pair part in a symbol table.
 //
-func (ppart *PairPartRef) GetName() string {
-	if ppart.Pairvar.GetID() == ppart.GetID() {
-		return "xpart " + ppart.Pairvar.GetName()
-	} else {
-		return "ypart " + ppart.Pairvar.GetName()
+func (ppart *PairPartRef) Name() string {
+	if ppart.Pairvar.ID == ppart.ID {
+		return "xpart " + ppart.Pairvar.Tag.Name
 	}
+	return "ypart " + ppart.Pairvar.Tag.Name
 }
 
-// Returns the serial ID for a pair variable's part.
-func (ppart *PairPartRef) GetID() int {
-	return ppart.Id
-}
-
-// Interface Typed.
+// Type returns the type of a pair part, which is always numeric.
 func (ppart *PairPartRef) Type() VariableType {
 	return NumericType
 }
 
-// Predicate: is this variable of type pair?
+func ppFromTag(tag *runtime.Tag) *PairPartRef {
+	return tag.UData.(*PairPartRef)
+}
+
+// IsPair is a predicate: is this variable of type pair?
 func (v *VarRef) IsPair() bool {
 	return v.Type() == PairType
 }
 
-// Get the x-part of a pair variable
+// XPart gets the x-part of a pair variable
 func (v *VarRef) XPart() *PairPartRef {
 	if !v.IsPair() {
-		T().P("var", v.GetName()).Errorf("cannot access x-part of non-pair")
+		T().P("var", v.Name).Errorf("cannot access x-part of non-pair")
 		return nil
 	}
-	return v.GetSibling().(*PairPartRef)
+	return ppFromTag(v.Sibling)
 }
 
-// Get the y-part of a pair variable
+// YPart gets the y-part of a pair variable
 func (v *VarRef) YPart() *PairPartRef {
 	if !v.IsPair() {
-		T().P("var", v.GetName()).Errorf("cannot access y-part of non-pair")
+		T().P("var", v.Name).Errorf("cannot access y-part of non-pair")
 		return nil
 	}
-	return v.GetFirstChild().(*PairPartRef)
+	return ppFromTag(v.Children)
 }
 
 /*
@@ -517,59 +463,42 @@ Get the x-part value of a pair.
 
 Interface runtime.Assignable
 */
-func (ppart *PairPartRef) GetValue() interface{} {
-	return ppart.Value
-}
+// func (ppart *PairPartRef) GetValue() interface{} {
+// 	return ppart.Value
+// }
 
 // Interface runtime.Assignable
-func (ppart *PairPartRef) SetValue(val interface{}) {
-	T().P("var", ppart.GetName()).Debugf("new value: %v", val)
-	ppart.Value = val
-	ppart.Pairvar.PullValue()
-}
+// func (ppart *PairPartRef) SetValue(val interface{}) {
+// 	T().P("var", ppart.Name).Debugf("new value: %v", val)
+// 	ppart.Value = val
+// 	ppart.Pairvar.PullValue()
+// }
 
-// Interface runtime.Assignable
+// IsKnown returns wether this pair part variable has a known value.
 func (ppart *PairPartRef) IsKnown() bool {
 	return (ppart.Value != nil)
 }
 
-// Filler for interface TreeNode. Never called.
-func (ppart *PairPartRef) GetSibling() runtime.TreeNode {
-	return nil
-}
-
-// Filler for interface TreeNode. Never called.
-func (ppart *PairPartRef) SetSibling(runtime.TreeNode) {
-}
-
-// Filler for interface TreeNode. Never called.
-func (ppart *PairPartRef) GetFirstChild() runtime.TreeNode {
-	return nil
-}
-
-// Filler for interface TreeNode. Never called.
-func (ppart *PairPartRef) SetFirstChild(tn runtime.TreeNode) {
-}
-
-// Get the full normalized (canonical) name of a variable,  i.e.
+// FullName gets the full normalized (canonical) name of a variable,  i.e.
 //
 //    "x[2].r".
 //
-func (v *VarRef) GetFullName() string {
+func (v *VarRef) FullName() string {
 	var suffixes []string
 	d := v.Decl
 	if d == nil {
-		return fmt.Sprintf("<undeclared variable: %s>", v.GetName())
+		return fmt.Sprintf("<undeclared variable: %s>", v.Name())
 	}
 	subscriptcount := len(v.subscripts) - 1
-	for sfx := v.Decl; sfx != nil; sfx = sfx.Parent { // iterate backwards
+	for sfx := &v.Decl.Suffix; sfx != nil; sfx = sfx.Parent { // iterate backwards
 		//T().Printf("sfx = %v", sfx)
-		if sfx.Type() == ComplexArray {
-			s := "[" + v.subscripts[subscriptcount].String() + "]"
+		//if sfx.Type() == SubscriptType {
+		if sfx.isSubscript {
+			s := "[" + fmt.Sprintf("%g", v.subscripts[subscriptcount]) + "]"
 			suffixes = append(suffixes, s)
-			subscriptcount -= 1
+			subscriptcount--
 		} else {
-			suffixes = append(suffixes, sfx.GetName())
+			suffixes = append(suffixes, sfx.Name())
 		}
 	}
 	// now reverse the slice of suffixes
@@ -587,18 +516,18 @@ func (v *VarRef) GetValue() interface{} {
 
 // SetValue satisfies interface runtime.Assignable
 func (v *VarRef) SetValue(val interface{}) {
-	T().P("var", v.GetName()).Debugf("new value: %v", val)
+	T().P("var", v.Name).Debugf("new value: %v", val)
 	v.Value = val
 	if v.IsPair() {
-		var xpart *PairPartRef = v.GetSibling().(*PairPartRef)
-		var ypart *PairPartRef = v.GetFirstChild().(*PairPartRef)
+		var xpart *PairPartRef = ppFromTag(v.Sibling)
+		var ypart *PairPartRef = ppFromTag(v.Children)
 		if val == nil {
 			xpart.Value = nil
 			ypart.Value = nil
 		} else {
-			var pairval arithmetic.Pair = val.(arithmetic.Pair)
-			xpart.Value = pairval.XPart()
-			ypart.Value = pairval.YPart()
+			var pairval arithm.Pair = val.(arithm.Pair)
+			xpart.Value = pairval.X
+			ypart.Value = pairval.Y
 		}
 	}
 }
@@ -611,96 +540,75 @@ func (v *VarRef) SetValue(val interface{}) {
 func (v *VarRef) PullValue() {
 	if v.IsPair() {
 		var ppart1, ppart2 *PairPartRef
-		ppart1 = v.GetSibling().(*PairPartRef)
-		ppart2 = v.GetFirstChild().(*PairPartRef)
+		ppart1 = ppFromTag(v.Sibling)
+		ppart2 = ppFromTag(v.Children)
 		if ppart1 != nil && ppart2 != nil {
-			if ppart1.GetValue() != nil && ppart2.GetValue() != nil {
-				v.Value = &arithmetic.SimplePair{
-					X: ppart1.GetValue().(dec.Decimal),
-					Y: ppart2.GetValue().(dec.Decimal),
-				}
-				T().P("var", v.GetName()).Debugf("pair value = %s",
-					v.Value.(arithmetic.Pair).String())
+			if ppart1.Value != nil && ppart2.Value != nil {
+				v.Value = arithm.P(ppart1.Value.(float64), ppart2.Value.(float64))
+				T().P("var", v.Name).Debugf("pair value = %s",
+					v.Value.(arithm.Pair).String())
 			}
 		}
 	}
 }
 
-/*
-Get the value of a variable as a string, if known. Otherwise return
-the tag name or type, depending on the variable type.
-*/
+// ValueString gets
+// the value of a variable as a string, if known. Otherwise return
+// the tag name or type, depending on the variable type.
 func (v *VarRef) ValueString() string {
 	if v.IsPair() {
 		var xvalue, yvalue string
 		xpart := v.XPart().Value
 		if xpart == nil {
-			xvalue = fmt.Sprintf("xpart %s", v.GetName())
+			xvalue = fmt.Sprintf("xpart %s", v.Name())
 		} else {
-			xvalue = xpart.(dec.Decimal).String()
+			xvalue = fmt.Sprintf("%g", xpart.(float64))
 		}
 		ypart := v.YPart().Value
 		if ypart == nil {
-			yvalue = fmt.Sprintf("ypart %s", v.GetName())
+			yvalue = fmt.Sprintf("ypart %s", v.Name())
 		} else {
-			yvalue = ypart.(dec.Decimal).String()
+			yvalue = fmt.Sprintf("%g", ypart.(float64))
 		}
 		return fmt.Sprintf("(%s,%s)", xvalue, yvalue)
-	} else {
-		if v.IsKnown() {
-			if d, ok := v.Value.(dec.Decimal); ok {
-				return d.String()
-			} else {
-				return fmt.Sprintf("%v", v)
-			}
-		} else {
-			return "<numeric>"
-		}
 	}
-	return "?"
+	if v.IsKnown() {
+		return fmt.Sprintf("%v", v)
+	}
+	return "<numeric>"
 }
 
-// Interface runtime.Assignable
+// IsKnown returns wether this variable has a known value.
 func (v *VarRef) IsKnown() bool {
 	return (v.Value != nil)
 }
 
-/*
-Set a new ID for a variable reference. Whenever variables become
-re-incarnated, a new serial ID is needed. Re-incarnation happens,
-whenever a variable goes out of scope, but is still relevant in the
-LEQ-system. The variables' name continues to live on in a new incarnation,
-while the out-of-scope variable lives on with the old serial.
-
-Returns the old serial ID.
-*/
-func (v *VarRef) Reincarnate() int {
-	oldserial := v.GetID()
-	v.Id = newVarSerial()
+// Reincarnate sets a
+// new ID for a variable reference. Whenever variables become
+// re-incarnated, a new serial ID is needed. Re-incarnation happens,
+// whenever a variable goes out of scope, but is still relevant in the
+// LEQ-system. The variables' name continues to live on in a new incarnation,
+// while the out-of-scope variable lives on with the old serial.
+//
+// Returns the old serial ID.
+//
+func (v *VarRef) Reincarnate() int32 {
+	oldserial := v.ID
+	v.ID = newVarSerial()
 	if v.IsPair() {
 		ypartid := newVarSerial()
-		v.XPart().Id = v.Id
-		v.YPart().Id = ypartid
+		v.XPart().ID = v.ID
+		v.YPart().ID = ypartid
 	}
 	return oldserial
 }
 
-var varSerial = 1 // serial number counter for variables, always > 0 !
+var varSerial int32 = 1 // serial number counter for variables, always > 0 !
 
 // Get a new unique serial ID for variables.
-func newVarSerial() int {
+func newVarSerial() int32 {
 	serial := varSerial
 	varSerial++
 	T().Debugf("creating new serial ID %d", serial)
 	return serial
 }
-
-// check interface assignability
-var _ runtime.Symbol = &VarRef{}
-var _ runtime.Typable = &VarRef{}
-var _ runtime.TreeNode = &VarRef{}
-var _ runtime.Assignable = &VarRef{}
-
-var _ runtime.Symbol = &PairPartRef{}
-var _ runtime.TreeNode = &PairPartRef{}
-var _ runtime.Assignable = &PairPartRef{}
