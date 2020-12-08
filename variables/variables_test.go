@@ -109,35 +109,3 @@ func TestVarRefPair1(t *testing.T) {
 	}
 	t.Fail()
 }
-
-/*
-func TestVarRefParser1(t *testing.T) {
-	listener.ParseVariableFromString("x@", newErrL())
-	checkErr(t)
-}
-
-func TestVarRefParser2(t *testing.T) {
-	listener.ParseVariableFromString("x1@", newErrL())
-	checkErr(t)
-}
-
-func TestVarRefParser3(t *testing.T) {
-	listener.ParseVariableFromString("x.a@", newErrL())
-	checkErr(t)
-}
-
-func TestVarRefParser4(t *testing.T) {
-	listener.ParseVariableFromString("xyz18abc@", newErrL())
-	checkErr(t)
-}
-
-func TestVarRefParser5(t *testing.T) {
-	listener.ParseVariableFromString("xyz18.abc@", newErrL())
-	checkErr(t)
-}
-
-func TestVarRefParser6(t *testing.T) {
-	listener.ParseVariableFromString("x1a[2]b@", newErrL())
-	checkErr(t)
-}
-*/
