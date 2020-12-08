@@ -1,12 +1,12 @@
 /*
-Package varparse implements a parser to get variable references from strings.
+Package varparse implements functions to create variable declarations
+and references from syntax trees.
 
-The implementation is tightly coupled to the ANTLR V4 parser generator.
 
 
 BSD License
 
-Copyright (c) 2017, Norbert Pillmayer
+Copyright (c) 2017-21, Norbert Pillmayer
 
 All rights reserved.
 
@@ -21,7 +21,7 @@ notice, this list of conditions and the following disclaimer.
 notice, this list of conditions and the following disclaimer in the
 documentation and/or other materials provided with the distribution.
 
-3. Neither the name of Norbert Pillmayer nor the names of its contributors
+3. Neither the name of the software nor the names of its contributors
 may be used to endorse or promote products derived from this software
 without specific prior written permission.
 
@@ -35,114 +35,62 @@ LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
 DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-*/
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 package varparse
 
 import (
-	"fmt"
-	"strconv"
-
-	"github.com/antlr/antlr4/runtime/Go/antlr"
-	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
-	"github.com/npillmayer/pmmp/runtime"
+	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/pmmp/variables"
-	"github.com/npillmayer/pmmp/variables/grammar"
+	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing"
-	dec "github.com/shopspring/decimal"
 )
 
-// We're tracing to the InterpreterTracer
+// T traces to the global syntax tracer
 func T() tracing.Trace {
-	return tracing.InterpreterTracer
+	return gtrace.SyntaxTracer
 }
 
 // === Variable Parser =======================================================
 
-/*
-We use a small ANTLR V4 sub-grammar for parsing variable references.
-We'll attach a listener to ANTLR's AST walker.
-*/
-type varParseListener struct {
-	*grammar.BasePMMPVarListener // build on top of ANTLR's base 'class'
-	scopeTree                    *runtime.ScopeTree
-	def                          *variables.PMMPVarDecl
-	ref                          *variables.PMMPVarRef
-	suffixes                     *sll.List
-	fullname                     string // full variable name
-}
-
-// Construct a new variable parse listener.
-func newVarParseListener() *varParseListener {
-	pl := &varParseListener{} // no need to initialize base class
-	return pl
-}
-
-// Parse a variable from a string. This function will try to find an existing
-// declaration and extend it accordingly. If no declaration can be found, this
-// function will construct a new one from the variable reference.
-//
-// To find a variable in memory we first construct the "canonical" form.
-// Variables live in symbol tables and are resolved by name, so the exact
-// spelling of the variable's name is important. The canonical form uses
-// brackets for subscripts and dots for suffixes.
-//
-// Examples:
-//
-//    x ⟹ x
-//    x3 ⟹ x[3]
-//    z4r ⟹ z[4].r
-//    hello.world ⟹ hello.world
-//
-func parseVariableFromString(vstr string, err antlr.ErrorListener) antlr.RuleContext {
-	// We let ANTLR to the heavy lifting. This may change in the future,
-	// as it would be fairly straightforward to implement this by hand.
-	input := antlr.NewInputStream(vstr + "@")
-	T().Debugf("parsing variable ref = %s", vstr)
-	varlexer := grammar.NewPMMPVarLexer(input)
-	stream := antlr.NewCommonTokenStream(varlexer, 0)
-	// TODO: make the parser re-usable....!
-	// TODO: We can re-use the parser, but not the lexer (see ANTLR book, chapter 10).
-	varParser := grammar.NewPMMPVarParser(stream)
-	if err == nil {
-		err = antlr.NewDiagnosticErrorListener(true)
-	} else {
-		T().Debugf("setting error listener")
-	}
-	varParser.RemoveErrorListeners()
-	varParser.AddErrorListener(err)
-	varlexer.RemoveErrorListeners()
-	varlexer.AddErrorListener(err)
-	varParser.BuildParseTrees = true
-	tree := varParser.Variable()
-	sexpr := antlr.TreesStringTree(tree, nil, varParser)
-	T().Debugf("### VAR = %s", sexpr)
-	return tree
-}
-
-// After having ANTLR create us a parse tree for a variable identifier, we
-// will construct a variable reference from the parse tree. This var ref
+// After having created an abstract syntax tree (AST) for a variable identifier,
+// we will construct a variable reference from the parse tree. This var ref
 // has an initial serial which is unique. This may not be what you want:
 // usually you will try to find an existing incarnation (with a lower serial)
 // in the memory (see method FindVariableReferenceInMemory).
 //
-// We walk the ANTLR parse tree using a listener (varParseListener).
+// We walk the AST using a listener (varParseListener).
 //
-func getVarRefFromVarSyntax(vtree antlr.RuleContext, scopes *runtime.ScopeTree) (
-	*variables.PMMPVarRef, string) {
+func getVarRefFromVarSyntax(el terex.Element) *variables.VarRef {
 	//
-	listener := newVarParseListener()
-	listener.scopeTree = scopes                        // where variables declarations have to be found
-	listener.suffixes = sll.New()                      // list to collect suffixes
-	antlr.ParseTreeWalkerDefault.Walk(listener, vtree) // fills listener.ref
-	return listener.ref, listener.def.GetFullName()
+	el.Dump(tracing.LevelInfo)
+	return nil
 }
 
-// Helper struct to collect suffixes
-type varsuffix struct {
-	text   string
-	number bool
+type suffixBuilder func(node terex.Atom, parent terex.Atom) terex.Element
+
+func createSuffix(node terex.Atom, parent terex.Atom) terex.Element {
+	return terex.Elem(nil)
+}
+
+// Traverser in pre-order.
+func traverseAST(e terex.Element, parent terex.Atom, sb suffixBuilder) terex.Element {
+	if e.IsAtom() {
+		return sb(e.AsAtom(), parent)
+	}
+	list := e.AsList()
+	curNode := list.First()
+	sb(curNode, parent)
+	//
+	rest := list.Rest()
+	for rest != nil {
+		node := rest.Car
+		if node.Type() != terex.ConsType {
+			//
+			sb(node, curNode)
+		}
+		rest = rest.Cdr
+	}
+	return terex.Elem(e)
 }
 
 /*
@@ -180,6 +128,7 @@ and
 
 The MARKER will be ignored.
 */
+/*
 func (vl *varParseListener) ExitVariable(ctx *grammar.VariableContext) {
 	tag := ctx.Tag().GetText()
 	T().P("tag", tag).Debugf("looking for declaration for tag")
@@ -234,9 +183,10 @@ func (vl *varParseListener) ExitSubscript(ctx *grammar.SubscriptContext) {
 	T().Debugf("subscript: %s", d)
 	vl.suffixes.Add(varsuffix{d, true})
 }
-
+*/
 // ----------------------------------------------------------------------
 
+/*
 // VariableResolver will find a variable's declaration in a scope tree,
 // if present. It will then construct a valid variable reference for
 // that declaration.
@@ -289,3 +239,4 @@ func (el *varErrorListener) SyntaxError(r antlr.Recognizer, sym interface{},
 	//
 	el.err = fmt.Errorf("[%s|%s] %.44s", strconv.Itoa(line), strconv.Itoa(column), msg)
 }
+*/

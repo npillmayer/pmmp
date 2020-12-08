@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/npillmayer/gorgo/lr/sppf"
+	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing"
 	"github.com/npillmayer/schuko/tracing/gotestingadapter"
@@ -35,4 +36,25 @@ func TestParse(t *testing.T) {
 	}
 	sppf.ToGraphViz(parsetree, tmpfile)
 	T().Infof("Exported parse tree to %s", tmpfile.Name())
+}
+
+func TestAST(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelError)
+	//
+	input := "a.r1b"
+	tree, retr, err := Parse(input)
+	if err != nil {
+		t.Error(err)
+	}
+	//
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelInfo)
+	ast, _, err := AST(tree, retr)
+	if err != nil {
+		t.Error(err)
+	}
+	terex.Elem(ast).Dump(tracing.LevelInfo)
+	t.Fail()
 }
