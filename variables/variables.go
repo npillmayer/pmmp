@@ -3,6 +3,7 @@ package variables
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/npillmayer/arithm"
@@ -18,7 +19,7 @@ func T() tracing.Trace {
 
 // === Variable Type Declarations ============================================
 
-// VariableType represents the type of a variable (obviously).
+// VariableType obviously represents the type of a variable.
 type VariableType int8
 
 // Predefined variable types
@@ -29,70 +30,19 @@ const (
 	PathType
 	ColorType
 	PenType
-	BoxType
-	FrameType
 	VardefType
 	SubscriptType
 	SuffixType
 )
 
-// TypeString returns a type as string.
-func (vt VariableType) String() string {
-	switch vt {
-	case Undefined:
-		return "<undefined>"
-	case NumericType:
-		return "numeric"
-	case PairType:
-		return "pair"
-	case PathType:
-		return "path"
-	case ColorType:
-		return "color"
-	case PenType:
-		return "pen"
-	case BoxType:
-		return "box"
-	case FrameType:
-		return "frame"
-	case VardefType:
-		return "vardef"
-	case SubscriptType:
-		return "[]"
-	case SuffixType:
-		return "<suffix>"
-	}
-	return fmt.Sprintf("<illegal type: %d>", vt)
-}
-
-// TypeFromString gets a type from a string.
-func TypeFromString(str string) VariableType {
-	switch str {
-	case "numeric":
-		return NumericType
-	case "pair":
-		return PairType
-	case "path":
-		return PathType
-	case "color":
-		return ColorType
-	case "pen":
-		return PenType
-	case "box":
-		return BoxType
-	case "frame":
-		return FrameType
-	}
-	return Undefined
-}
-
 /*
 VarDecl represents a variable declaration.
 
-MetaFont declares variables explicitly ("numeric x;") or dynamically
-("x=1" ⟹ x is of type numeric). Dynamic variable use is permitted for
-numeric variables only. All other types must be declared. Declaration
-is for tags only, i.e. the "x" in "x2r". This differs from MetaFont,
+MetaFont declares variables explicitly (`numeric x`) or dynamically
+(`x=1` ⟹ x is of type numeric). Dynamic typing is permitted for
+numeric variables only, all other types must be declared. In our
+implementation, declaration
+is for tags only, i.e. the `x` in `x2r`. This differs from MetaFont,
 where x2r can have a separate type from x.
 
 We build up a doubly-linked tree of variable declarations to describe a
@@ -107,9 +57,9 @@ Example:
 Result:
 
   tag = "x"  of type NumericType ⟹ into symbol table of a scope
-     +-- suffix ".b" of type SuffixType         "x.b"
-     +-- subscript "[]" of type SubscriptType:      "x[]"
-         +--- suffix ".r" of type SuffixType:  "x[].r"
+     +-- suffix ".b" of type SuffixType           "x.b"
+     +-- subscript "[]" of type SubscriptType:    "x[]"
+         +--- suffix ".r" of type SuffixType:     "x[].r"
 
 */
 type VarDecl struct { // this is a tag, an array-subtype, or a suffix
@@ -128,10 +78,10 @@ type Suffix struct {
 }
 
 // NewVarDecl creates and initialize a new variable type declaration.
-func NewVarDecl(nm string) *VarDecl {
+func NewVarDecl(nm string, tp VariableType) *VarDecl {
 	decl := &VarDecl{}
 	decl.name = nm
-	decl.tag = runtime.NewTag(nm).WithType(int8(Undefined))
+	decl.tag = runtime.NewTag(nm).WithType(int8(tp))
 	decl.tag.UData = decl
 	decl.baseDecl = decl // this pointer should never be nil
 	T().P("decl", decl.FullName()).Debugf("atomic variable type declaration created")
@@ -143,10 +93,12 @@ func (d *VarDecl) Tag() *runtime.Tag {
 	return d.tag
 }
 
-func VarDeclFromTag(tag *runtime.Tag) *VarDecl {
+func varDeclFromTag(tag *runtime.Tag) *VarDecl {
 	return tag.UData.(*VarDecl)
 }
 
+// AsSuffix returns a variable declaration as a Suffix. Every variable
+// declaration is also a suffix, although one without a parent.
 func (d *VarDecl) AsSuffix() *Suffix {
 	return &d.Suffix
 }
@@ -186,7 +138,6 @@ func (s *Suffix) FullName() string {
 	} // we are in a declaration for a complex type
 	var str bytes.Buffer
 	str.WriteString(s.Parent.FullName()) // recursive
-	//t := s.Type()
 	if s.isSubscript {
 		str.WriteString("[]")
 	} else {
@@ -208,7 +159,15 @@ func (s *Suffix) GetBaseType() VariableType {
 // the same signature as the one to create, this function will not create
 // a new partial, but provide the existing one.
 //
+// Will panic if tp is neither SuffixType nor SubscriptType (use
+// NewVarDecl() instead).
+//
+// Will panic if SubscriptType, but no parent given.
+//
 func CreateSuffix(nm string, tp VariableType, parent *Suffix) *Suffix {
+	if tp != SubscriptType && tp != SuffixType {
+		panic("Suffix must either be of type SuffixType or SubscriptType")
+	}
 	if parent != nil { // check if already exists as child of parent
 		if parent.Suffixes != nil {
 			ch := parent.Suffixes
@@ -222,23 +181,29 @@ func CreateSuffix(nm string, tp VariableType, parent *Suffix) *Suffix {
 			}
 		}
 	}
-	s := &Suffix{name: nm} // not found, create a new one
-	if parent != nil {     // append to parent suffix
-		s.AppendToSuffix(parent)
-	} else { // wrap into a var decl
-		d := NewVarDecl(nm)
+	s := &Suffix{ // not found => create a new one
+		name:        nm,
+		isSubscript: tp == SubscriptType,
+	}
+	if parent == nil { // then wrap into a var decl
+		if s.isSubscript { // can't have a subscript as a top-level var decl
+			panic("Trying to have standalone subscript")
+		}
+		d := NewVarDecl(nm, NumericType) // numeric is default in MetaFont
 		d.Suffix = *s
 		s.baseDecl = d
+		return d.AsSuffix()
 	}
+	s.appendToSuffix(parent) // parent given => append to it
 	T().P("decl", s.FullName()).Debugf("variable type decl suffix created")
 	return s
 }
 
-// AppendToSuffix appends a complex type partial (suffix or array) to a parent identifier.
+// appendToSuffix appends a complex type partial (suffix or array) to a parent identifier.
 // Will not append the partial, if a partial with this name already
 // exists (as a child).
 //
-func (s *Suffix) AppendToSuffix(parent *Suffix) *Suffix {
+func (s *Suffix) appendToSuffix(parent *Suffix) *Suffix {
 	if parent == nil {
 		panic("attempt to append type declaration to nil-tag")
 	}
@@ -288,43 +253,40 @@ func (s *Suffix) ShowDeclarations(b *bytes.Buffer) *bytes.Buffer {
 //
 // Variable references can have a value (of type interface{}).
 //
+// All in all, variable references may get pretty complicated. This is due
+// to the complicated nature of MetaFont/-Post variables, but also from
+// the fact, that variable values must be solvable by a system of linear
+// equations (LEQ). Having variable values described by a LEQ is a core
+// feature of MetaPost, so we better invest some effort.
+//
 type VarRef struct {
 	runtime.Tag             // store by normalized name
 	cachedName  string      // store full name
-	Decl        *VarDecl    // type declaration for this variable
+	decl        *Suffix     // type declaration for this variable
 	subscripts  []float64   // list of subscript value, first to last
 	Value       interface{} // if known: has a value (numeric, pair, path, ...)
 }
 
 // CreateVarRef creates a variable reference. Low level method.
-func CreateVarRef(decl *VarDecl, value interface{}, indices []float64) *VarRef {
+func CreateVarRef(decl *Suffix, value interface{}, indices []float64) *VarRef {
 	if decl.GetBaseType() == PairType {
 		return CreatePairTypeVarRef(decl, value, indices)
 	}
 	T().Debugf("creating %s var for %v", decl.Type().String(), decl)
 	v := &VarRef{
-		Decl:       decl,
+		decl:       decl,
 		subscripts: indices,
 		Value:      value,
 	}
 	v.ChangeType(int8(decl.Type()))
 	v.ID = newVarSerial() // TODO: check, when this is needed (now: id leak)
 	//T().Debugf("created var ref: subscripts = %v", indices)
-	v.Tag.UData = v
+	v.Tag.UData = v // link back to var from tag
 	return v
 }
 
-// NewVarRef is a creator for symbol table: creates tag symbol.
-// Do not use this for pair variables !!
-// func NewVarRef(tagName string) *runtime.Tag {
-// 	T().P("tag", tagName).Debugf("tag for variable reference created")
-// 	v := &VarRef{}
-// 	v.ID = newVarSerial()
-// 	return v
-// }
-
 func (v *VarRef) String() string {
-	return fmt.Sprintf("<var %s=%v w/ %s>", v.FullName(), v.Value, v.Decl)
+	return fmt.Sprintf("<var %s=%v w/ %s>", v.FullName(), v.Value, v.decl.FullName())
 }
 
 // Name returns the full nomalized name, i.e. "x[2].r".
@@ -340,8 +302,8 @@ func (v *VarRef) Name() string {
 
 // Type returns the variable's type.
 func (v *VarRef) Type() VariableType {
-	if v.Decl != nil {
-		return v.Decl.GetBaseType()
+	if v.decl != nil {
+		return v.decl.GetBaseType()
 	}
 	return Undefined
 }
@@ -384,13 +346,14 @@ type PairPartRef struct {
 }
 
 // CreatePairTypeVarRef creates a pair variable reference. Low level method.
-func CreatePairTypeVarRef(decl *VarDecl, value interface{}, indices []float64) *VarRef {
-	T().Debugf("creating pair var for %v", decl)
+func CreatePairTypeVarRef(decl *Suffix, value interface{}, indices []float64) *VarRef {
+	T().Debugf("creating pair var for %v", decl.baseDecl.FullName())
 	v := &VarRef{
-		Decl:       decl,
+		decl:       decl,
 		subscripts: indices,
 		Value:      value,
 	}
+	v.Tag.Name = decl.name
 	v.ChangeType(int8(PairType))
 	v.ID = newVarSerial() // TODO: check, when this is needed (now: id leak)
 	var pair arithm.Pair
@@ -408,8 +371,12 @@ func CreatePairTypeVarRef(decl *VarDecl, value interface{}, indices []float64) *
 	v.Sibling = &xpart.Tag
 	v.Children = &ypart.Tag
 	if pair, ok = value.(arithm.Pair); ok {
-		xpart.Value = pair.X
-		ypart.Value = pair.Y
+		T().Debugf("setting value of pair var to %v", pair)
+		xpart.Value = pair.X()
+		ypart.Value = pair.Y()
+	} else {
+		xpart.Value = math.NaN()
+		ypart.Value = math.NaN()
 	}
 	return v
 }
@@ -433,6 +400,10 @@ func (ppart *PairPartRef) Type() VariableType {
 
 func ppFromTag(tag *runtime.Tag) *PairPartRef {
 	return tag.UData.(*PairPartRef)
+}
+
+func (ppart *PairPartRef) String() string {
+	return "<" + ppart.Name() + fmt.Sprintf("=%v>", ppart.Value.(float64))
 }
 
 // IsPair is a predicate: is this variable of type pair?
@@ -485,12 +456,12 @@ func (ppart *PairPartRef) IsKnown() bool {
 //
 func (v *VarRef) FullName() string {
 	var suffixes []string
-	d := v.Decl
+	d := v.decl
 	if d == nil {
 		return fmt.Sprintf("<undeclared variable: %s>", v.Name())
 	}
 	subscriptcount := len(v.subscripts) - 1
-	for sfx := &v.Decl.Suffix; sfx != nil; sfx = sfx.Parent { // iterate backwards
+	for sfx := v.decl; sfx != nil; sfx = sfx.Parent { // iterate backwards
 		//T().Printf("sfx = %v", sfx)
 		//if sfx.Type() == SubscriptType {
 		if sfx.isSubscript {
@@ -611,4 +582,48 @@ func newVarSerial() int32 {
 	varSerial++
 	T().Debugf("creating new serial ID %d", serial)
 	return serial
+}
+
+// --- Helpers ---------------------------------------------------------------
+
+// TypeString returns a type as string.
+func (vt VariableType) String() string {
+	switch vt {
+	case Undefined:
+		return "<undefined>"
+	case NumericType:
+		return "numeric"
+	case PairType:
+		return "pair"
+	case PathType:
+		return "path"
+	case ColorType:
+		return "color"
+	case PenType:
+		return "pen"
+	case VardefType:
+		return "vardef"
+	case SubscriptType:
+		return "[]"
+	case SuffixType:
+		return "<suffix>"
+	}
+	return fmt.Sprintf("<illegal type: %d>", vt)
+}
+
+// TypeFromString gets a type from a string.
+func TypeFromString(str string) VariableType {
+	switch str {
+	case "numeric":
+		return NumericType
+	case "pair":
+		return PairType
+	case "path":
+		return PathType
+	case "color":
+		return ColorType
+	case "pen":
+		return PenType
+	}
+	return Undefined
 }

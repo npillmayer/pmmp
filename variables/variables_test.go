@@ -1,49 +1,17 @@
 package variables_test
 
 import (
-	"fmt"
-	"log"
-	"strconv"
 	"testing"
 
-	"github.com/antlr/antlr4/runtime/Go/antlr"
+	"github.com/npillmayer/arithm"
 	"github.com/npillmayer/gorgo/runtime"
 	"github.com/npillmayer/pmmp/variables"
 	"github.com/npillmayer/schuko/gtrace"
-	"github.com/npillmayer/schuko/tracing/gologadapter"
+	"github.com/npillmayer/schuko/tracing"
+	"github.com/npillmayer/schuko/tracing/gotestingadapter"
 )
 
-type TestingErrorListener struct {
-	*antlr.DefaultErrorListener // use default as base class
-}
-
-var parserr string
-
-/* Our error listener prints an error and set a global error flag.
- */
-func (c *TestingErrorListener) SyntaxError(r antlr.Recognizer, sym interface{},
-	line, column int, msg string, e antlr.RecognitionException) {
-	//
-	at := fmt.Sprintf("%s:%s", strconv.Itoa(line), strconv.Itoa(column))
-	log.Printf("line %s: %.44s", at, msg)
-	parserr = msg
-}
-
-func newErrL() antlr.ErrorListener {
-	return &TestingErrorListener{}
-}
-
-func checkErr(t *testing.T) {
-	if parserr != "" {
-		t.Errorf(parserr)
-	}
-}
-
 // Init the global tracers.
-func TestInit0(t *testing.T) {
-	gtrace.InterpreterTracer = gologadapter.New()
-	gtrace.SyntaxTracer = gologadapter.New()
-}
 
 func TestVarDecl1(t *testing.T) {
 	symtab := runtime.NewSymbolTable()
@@ -51,46 +19,96 @@ func TestVarDecl1(t *testing.T) {
 }
 
 func TestVarDecl2(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
 	symtab := runtime.NewSymbolTable()
-	x := variables.NewVarDecl("x")
+	x := variables.NewVarDecl("x", variables.NumericType)
 	symtab.InsertTag(x.Tag())
 	variables.CreateSuffix("r", variables.SuffixType, x.AsSuffix())
 }
 
-/*
 func TestVarDecl3(t *testing.T) {
-	symtab := runtime.NewSymbolTable()
-	x, _ := symtab.DefineTag("x")
-	var v *variables.VarDecl = x.(*variables.VarDecl)
-	variables.CreateVarDecl("r", variables.ComplexSuffix, v)
-	arr := variables.CreateVarDecl("<array>", variables.ComplexArray, x.(*variables.VarDecl))
-	variables.CreateVarDecl("a", variables.ComplexSuffix, arr)
-	//var b *bytes.Buffer
-	//b = v.ShowVariable(b)
-	//fmt.Printf("## showvariable %s;\n%s\n", v.BaseTag.GetName(), b.String())
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	x := variables.NewVarDecl("x", variables.NumericType)
+	r := variables.CreateSuffix("r", variables.SuffixType, x.AsSuffix())
+	arr := variables.CreateSuffix("<array>", variables.SubscriptType, r)
+	variables.CreateSuffix("a", variables.SuffixType, arr)
+}
+
+func TestVarDecl4(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	x := variables.NewVarDecl("x", variables.NumericType)
+	r := variables.CreateSuffix("r", variables.SuffixType, x.AsSuffix())
+	r2 := variables.CreateSuffix("r", variables.SuffixType, x.AsSuffix())
+	if r != r2 {
+		t.Errorf("Expected suffix not to be re-created, but re-used")
+	}
 }
 
 func TestVarRef1(t *testing.T) {
-	x := variables.CreateVarDecl("x", variables.NumericType, nil)
-	var v *variables.VarRef = variables.CreateVarRef(x, 1, nil)
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	// build x="hello"
+	x := variables.NewVarDecl("x", variables.PathType)
+	var v *variables.VarRef = variables.CreateVarRef(x.AsSuffix(), "hello", nil)
 	t.Logf("var ref: %v\n", v)
 }
 
 func TestVarRef2(t *testing.T) {
-	x := variables.CreateVarDecl("x", variables.NumericType, nil)
-	r := variables.CreateVarDecl("r", variables.ComplexSuffix, x)
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	// build x.r=1
+	x := variables.NewVarDecl("x", variables.NumericType)
+	r := variables.CreateSuffix("r", variables.SuffixType, x.AsSuffix())
 	var v *variables.VarRef = variables.CreateVarRef(r, 1, nil)
 	t.Logf("var ref: %v\n", v)
 }
 
 func TestVarRef3(t *testing.T) {
-	x := variables.CreateVarDecl("x", variables.NumericType, nil)
-	arr := variables.CreateVarDecl("<[]>", variables.ComplexArray, x)
-	subs := []decimal.Decimal{decimal.New(7, 0)}
-	var v *variables.VarRef = variables.CreateVarRef(arr, 7, subs)
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	// build x[7]=1
+	x := variables.NewVarDecl("x", variables.NumericType)
+	arr := variables.CreateSuffix("<[]>", variables.SubscriptType, x.AsSuffix())
+	subs := []float64{7.0}
+	var v *variables.VarRef = variables.CreateVarRef(arr, 1.0, subs)
 	t.Logf("var ref: %v\n", v)
 }
-*/
+
+func TestVarRefPair1(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	// build x.r=(1,2)
+	x := variables.NewVarDecl("x", variables.PairType)
+	r := variables.CreateSuffix("r", variables.SuffixType, x.AsSuffix())
+	var v *variables.VarRef = variables.CreateVarRef(r, arithm.P(1, 2), nil)
+	if !v.IsPair() {
+		t.Errorf("Expected v to be a pair variable, but is not")
+	}
+	t.Logf("var ref: %v\n", v)
+	ypart := v.YPart()
+	t.Logf("ypart of v = %v", ypart.String())
+	if ypart.Value != 2.0 {
+		t.Errorf("Expected ypart of x.r to have value=2, has not")
+	}
+	t.Fail()
+}
 
 /*
 func TestVarRefParser1(t *testing.T) {
