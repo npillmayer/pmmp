@@ -39,41 +39,57 @@ func TestVariableAST(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
-	ast := compile("a.r1b", t)
-	if ast == nil {
-		t.Fail()
-	}
+	compile("a.r1b", t)
 }
 
-func TestAtomAST(t *testing.T) {
+func TestAtom1AST(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
-	ast := compile("true", t)
-	if ast == nil {
-		t.Fail()
-	}
+	compile("true", t)
+}
+
+func TestAtom2AST(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("1/2", t)
 }
 
 func TestPrimaryAST(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
-	ast := compile("xpart z", t)
-	if ast == nil {
-		t.Fail()
-	}
+	compile("xpart z", t)
 }
 
 func TestSecondaryAST(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
-	ast := compile("a * xpart z", t)
-	//ast := compile("a * b", t)
-	if ast == nil {
-		t.Fail()
-	}
+	compile("a * xpart z", t)
+}
+
+func TestTertiaryAST(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("a * xpart z - 4", t)
+}
+
+func TestExpr1AST(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("x' < -1/4", t)
+	t.Fail()
+}
+
+func TestExpr2AST(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("x < (1 + 2)", t)
 	t.Fail()
 }
 
@@ -91,6 +107,9 @@ func compile(input string, t *testing.T) *terex.GCons {
 		t.Error(err)
 	}
 	terex.Elem(ast).Dump(tracing.LevelInfo)
+	if ast == nil {
+		t.Errorf("AST is empty")
+	}
 	return ast
 }
 
@@ -98,7 +117,7 @@ func parse(input string, dot bool, t *testing.T) {
 	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelInfo)
 	parser := createParser()
 	scan, _ := mpLexer.Scanner(input)
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelInfo)
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
 	accept, err := parser.Parse(scan, nil)
 	t.Logf("accept=%v, input=%s", accept, input)
 	if err != nil {
@@ -107,13 +126,14 @@ func parse(input string, dot bool, t *testing.T) {
 	if !accept {
 		t.Errorf("No accept. Not a valid MetaPost expression")
 	}
-	parsetree := parser.ParseForest()
-	if dot {
+	if err == nil && accept && dot {
+		parsetree := parser.ParseForest()
 		tmpfile, err := ioutil.TempFile(".", "parsetree-*.dot")
 		if err != nil {
 			t.Error("cannot open tmp file for graphviz output")
+		} else {
+			sppf.ToGraphViz(parsetree, tmpfile)
+			T().Infof("Exported parse tree to %s", tmpfile.Name())
 		}
-		sppf.ToGraphViz(parsetree, tmpfile)
-		T().Infof("Exported parse tree to %s", tmpfile.Name())
 	}
 }

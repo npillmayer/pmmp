@@ -1,3 +1,11 @@
+⟨expression⟩ → ⟨subexpression⟩ 
+	| ⟨expression⟩  RelationOp  ⟨tertiary⟩ 
+
+⟨subexpression⟩ → ⟨tertiary⟩ 
+#	| ⟨path expression⟩  ⟨path join⟩  ⟨path knot⟩ 
+
+⟨tertiary⟩ → ⟨secondary⟩ 
+	| ⟨tertiary⟩  SecondaryOp  ⟨secondary⟩ 
 
 ⟨secondary⟩ → ⟨primary⟩ 
 	| ⟨secondary⟩  PrimaryOp  ⟨primary⟩ 
@@ -8,6 +16,7 @@
 ⟨atom⟩ → ⟨variable⟩ 
 	| NUMBER
 	| NullaryOp
+	| ( ⟨expression⟩ )
 
 ⟨variable⟩ → TAG ⟨suffix⟩ 
 

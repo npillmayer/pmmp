@@ -126,6 +126,7 @@ func initTokens() {
 		tokenIds["UnaryOp"] = UnaryOp
 		tokenIds["PrimaryOp"] = PrimaryOp
 		tokenIds["SecondaryOp"] = SecondaryOp
+		tokenIds["RelationOp"] = RelationOp
 		tokenIds["AssignOp"] = AssignOp
 		tokenIds["OfOp"] = OfOp
 		tokenIds["UnaryTransform"] = UnaryTransform
@@ -189,8 +190,8 @@ func Lexer() (*scanner.LMAdapter, error) {
 		lexer.Add([]byte(`\"[^"]*\"`), makeToken("STRING"))
 		lexer.Add([]byte(`[\+\-]?[0-9]+(\.[0-9]+)?`), makeToken("NUMBER")) // float
 		lexer.Add([]byte(`[\+\-]?[0-9]+(\/[0-9]+)?`), makeToken("NUMBER")) // fraction
-		lexer.Add([]byte(`([a-z]|[A-Z])+`), makeSymbol())
-		lexer.Add([]byte(`([a-z]|[A-Z])+(\.([a-z|[A-Z])+)+`), makeSymbol())
+		lexer.Add([]byte(`([a-z]|[A-Z]|')+`), makeSymbol())
+		lexer.Add([]byte(`([a-z]|[A-Z]|')+(\.([a-z|[A-Z]|')+)+`), makeSymbol())
 		// lexer.Add([]byte(`([a-z]|[A-Z])+`), makeToken("TAG"))
 		// lexer.Add([]byte(`([a-z]|[A-Z])+(\.([a-z|[A-Z])+)+`), makeToken("TAG"))
 		lexer.Add([]byte(`( |\t|\n|\r)+`), scanner.Skip) // skip whitespace
@@ -237,6 +238,6 @@ func S(lexeme string) (string, int) {
 	if t, ok := tokenIds[lexeme]; ok { // is a keyword
 		return lexeme, t
 	}
-	panic("did not find token value for lexeme")
+	panic(fmt.Sprintf("did not find token value for lexeme '%s'", lexeme))
 	//return lexeme, tokenIds["TAG"] // this should not happen
 }

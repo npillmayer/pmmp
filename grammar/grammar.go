@@ -61,6 +61,11 @@ func createParser() *earley.Parser {
 func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 	b := lr.NewGrammarBuilder("MetaPost")
 
+	b.LHS("expression").N("subexpression").End()
+	b.LHS("expression").N("expression").T(S("RelationOp")).N("tertiary").End()
+	b.LHS("subexpression").N("tertiary").End()
+	b.LHS("tertiary").N("secondary").End()
+	b.LHS("tertiary").N("tertiary").T(S("SecondaryOp")).N("secondary").End()
 	b.LHS("secondary").N("primary").End()
 	b.LHS("secondary").N("secondary").T(S("PrimaryOp")).N("primary").End()
 	b.LHS("primary").N("atom").End()
@@ -68,6 +73,7 @@ func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 	b.LHS("atom").N("variable").End()
 	b.LHS("atom").T(S("NUMBER")).End()
 	b.LHS("atom").T(S("NullaryOp")).End()
+	b.LHS("atom").T("(", 40).N("expression").T(")", 41).End()
 	b.LHS("variable").T(S("TAG")).N("suffix").End()
 	b.LHS("suffix").Epsilon()
 	b.LHS("suffix").N("suffix").N("subscript").End()
@@ -157,11 +163,14 @@ func QuoteAST(ast terex.Element, env *terex.Environment) (terex.Element, error) 
 // NewASTBuilder returns a new AST builder for the MetaPost language
 func newASTBuilder(grammar *lr.Grammar) *termr.ASTBuilder {
 	ab := termr.NewASTBuilder(grammar)
+	ab.AddTermR(atomOp)
 	ab.AddTermR(varOp)
 	ab.AddTermR(suffixOp)
 	ab.AddTermR(subscrOp)
 	ab.AddTermR(primaryOp)
 	ab.AddTermR(secondaryOp)
+	ab.AddTermR(tertiaryOp)
+	ab.AddTermR(exprOp)
 	return ab
 }
 
@@ -207,13 +216,30 @@ func (trew *mpTermR) Call(e terex.Element, env *terex.Environment) terex.Element
 	return callFromEnvironment(trew.opname, e, env)
 }
 
+var atomOp *mpTermR      // for atom -> ... productions
 var varOp *mpTermR       // for variable -> ... productions
 var suffixOp *mpTermR    // for suffix -> ... productions
 var subscrOp *mpTermR    // for subscript -> ... productions
 var primaryOp *mpTermR   // for primary -> ... productions
 var secondaryOp *mpTermR // for secondary -> ... productions
+var tertiaryOp *mpTermR  // for tertiary -> ... productions
+var exprOp *mpTermR      // for expression -> ... productions
 
 func initRewriters() {
+	atomOp = makeASTTermR("atom", "atom")
+	atomOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨atom⟩ → ⟨variable⟩ | NUMBER | NullaryOp
+		//     | ( ⟨expression⟩ )
+		T().Infof("atom tree = ")
+		terex.Elem(l).Dump(tracing.LevelInfo)
+		if keywordArg(l) { // NUMBER | NullaryOp
+			convertTerminalToken(terex.Elem(l.Cdar()), env)
+			return terex.Elem(l.Cdar())
+		} else if singleArg(l) { // ⟨variable⟩
+			return terex.Elem(l.Cdar())
+		}
+		return terex.Elem(l.Cddar()) // ( ⟨expression⟩ ) ⇒ ⟨expression⟩
+	}
 	suffixOp = makeASTTermR("suffix", "suffix")
 	suffixOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨suffix⟩ → ε | ⟨suffix⟩ ⟨subscript⟩ | ⟨suffix⟩ TAG
@@ -266,8 +292,7 @@ func initRewriters() {
 	}
 	primaryOp = makeASTTermR("primary", "primary")
 	primaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨primary⟩ → ⟨atom⟩
-		//    | UnaryOp ⟨primary⟩
+		// ⟨primary⟩ → ⟨atom⟩ | UnaryOp ⟨primary⟩
 		T().Infof("primary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if !singleArg(l) { // ⟨primary⟩ → UnaryOp ⟨primary⟩
@@ -278,14 +303,39 @@ func initRewriters() {
 	}
 	secondaryOp = makeASTTermR("secondary", "secondary")
 	secondaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨secondary⟩ → ⟨primary⟩
-		//     | ⟨secondary⟩ PrimaryOp ⟨primary⟩
+		// ⟨secondary⟩ → ⟨primary⟩ | ⟨secondary⟩ PrimaryOp ⟨primary⟩
 		T().Infof("secondary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) {
 			return terex.Elem(l.Cdar()) // ⟨secondary⟩ → ⟨primary⟩
 		}
 		// ⟨secondary⟩ PrimaryOp ⟨primary⟩ ⇒ ( PrimaryOp ⟨secondary⟩ ⟨primary⟩ )
+		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
+		c := terex.Cons(opAtom, terex.Cons(l.Cdar(), l.Last()))
+		return terex.Elem(c)
+	}
+	tertiaryOp = makeASTTermR("tertiary", "tertiary")
+	tertiaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨tertiary⟩ → ⟨secondary⟩ | ⟨tertiary⟩  ⟨secondary binop⟩  ⟨secondary⟩
+		T().Infof("tertiary tree = ")
+		terex.Elem(l).Dump(tracing.LevelInfo)
+		if singleArg(l) {
+			return terex.Elem(l.Cdar()) // ⟨tertiary⟩ → ⟨secondary⟩
+		}
+		// ⟨tertiary⟩ SecondaryOp ⟨secondary⟩ ⇒ ( SecondaryOp ⟨tertiary⟩ ⟨secondary⟩ )
+		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
+		c := terex.Cons(opAtom, terex.Cons(l.Cdar(), l.Last()))
+		return terex.Elem(c)
+	}
+	exprOp = makeASTTermR("expression", "expr")
+	exprOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨expression⟩ → ⟨subexpression⟩ | ⟨expression⟩  RelationOp  ⟨tertiary⟩
+		T().Infof("expression tree = ")
+		terex.Elem(l).Dump(tracing.LevelInfo)
+		if singleArg(l) {
+			return terex.Elem(l.Cdar()) // ⟨expression⟩ → ⟨subexpression⟩
+		}
+		// ⟨expression⟩ RelationOp ⟨tertiary⟩ ⇒ ( RelationOp ⟨expression⟩ ⟨tertiary⟩ )
 		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
 		c := terex.Cons(opAtom, terex.Cons(l.Cdar(), l.Last()))
 		return terex.Elem(c)
@@ -298,6 +348,18 @@ func withoutArgs(l *terex.GCons) bool {
 
 func singleArg(l *terex.GCons) bool {
 	return l != nil && l.Length() == 2
+}
+
+func tokenArg(l *terex.GCons) bool {
+	return l != nil && l.Length() > 1 && l.Cdar().Type() == terex.TokenType
+}
+
+func keywordArg(l *terex.GCons) bool {
+	if !tokenArg(l) {
+		return false
+	}
+	tokname := l.Cdar().Data.(*terex.Token).Name
+	return len(tokname) > 1 // keyword have at least 2 letters
 }
 
 // TAG is given by the scanner as
@@ -343,7 +405,13 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 	T().Infof("Convert terminal token: '%v'", string(token.Lexeme))
 	switch token.Type {
 	case tokenIds["NUMBER"]:
-		if f, err := strconv.ParseFloat(string(token.Lexeme), 64); err == nil {
+		lexeme := string(token.Lexeme)
+		if strings.ContainsRune(lexeme, rune('/')) {
+			frac := strings.Split(lexeme, "/")
+			nom, _ := strconv.ParseFloat(frac[0], 64)
+			denom, _ := strconv.ParseFloat(frac[1], 64)
+			t.Value = nom / denom
+		} else if f, err := strconv.ParseFloat(string(token.Lexeme), 64); err == nil {
 			T().Debugf("   t.Value=%g", f)
 			t.Value = f
 		} else {
@@ -371,6 +439,10 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 	case tokenIds["UnaryOp"]:
 		fallthrough
 	case tokenIds["PrimaryOp"]:
+		fallthrough
+	case tokenIds["SecondaryOp"]:
+		fallthrough
+	case tokenIds["RelationOp"]:
 		t.Value = string(token.Lexeme)
 	default:
 	}
