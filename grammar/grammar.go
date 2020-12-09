@@ -61,9 +61,13 @@ func createParser() *earley.Parser {
 func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 	b := lr.NewGrammarBuilder("MetaPost")
 
+	b.LHS("secondary").N("primary").End()
+	b.LHS("secondary").N("secondary").T(S("PrimaryOp")).N("primary").End()
 	b.LHS("primary").N("atom").End()
+	b.LHS("primary").T(S("UnaryOp")).N("primary").End()
 	b.LHS("atom").N("variable").End()
 	b.LHS("atom").T(S("NUMBER")).End()
+	b.LHS("atom").T(S("NullaryOp")).End()
 	b.LHS("variable").T(S("TAG")).N("suffix").End()
 	b.LHS("suffix").Epsilon()
 	b.LHS("suffix").N("suffix").N("subscript").End()
@@ -156,6 +160,8 @@ func newASTBuilder(grammar *lr.Grammar) *termr.ASTBuilder {
 	ab.AddTermR(varOp)
 	ab.AddTermR(suffixOp)
 	ab.AddTermR(subscrOp)
+	ab.AddTermR(primaryOp)
+	ab.AddTermR(secondaryOp)
 	return ab
 }
 
@@ -198,22 +204,14 @@ func (trew *mpTermR) Descend(sppf.RuleCtxt) bool {
 }
 
 func (trew *mpTermR) Call(e terex.Element, env *terex.Environment) terex.Element {
-	opsym := env.FindSymbol(trew.opname, true)
-	if opsym == nil {
-		T().Errorf("Cannot find parsing operation %s", trew.opname)
-		return e
-	}
-	operator, ok := opsym.Value.AsAtom().Data.(terex.Operator)
-	if !ok {
-		T().Errorf("Cannot call parsing operation %s", trew.opname)
-		return e
-	}
-	return operator.Call(e, env)
+	return callFromEnvironment(trew.opname, e, env)
 }
 
-var varOp *mpTermR    // for variable -> ... productions
-var suffixOp *mpTermR // for suffix -> ... productions
-var subscrOp *mpTermR // for subscript -> ... productions
+var varOp *mpTermR       // for variable -> ... productions
+var suffixOp *mpTermR    // for suffix -> ... productions
+var subscrOp *mpTermR    // for subscript -> ... productions
+var primaryOp *mpTermR   // for primary -> ... productions
+var secondaryOp *mpTermR // for secondary -> ... productions
 
 func initRewriters() {
 	suffixOp = makeASTTermR("suffix", "suffix")
@@ -266,6 +264,32 @@ func initRewriters() {
 		l = terex.Cons(l.Car, ll) // prepend #variable operator
 		return terex.Elem(l)
 	}
+	primaryOp = makeASTTermR("primary", "primary")
+	primaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨primary⟩ → ⟨atom⟩
+		//    | UnaryOp ⟨primary⟩
+		T().Infof("primary tree = ")
+		terex.Elem(l).Dump(tracing.LevelInfo)
+		if !singleArg(l) { // ⟨primary⟩ → UnaryOp ⟨primary⟩
+			opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+			return terex.Elem(terex.Cons(opAtom, l.Cddr())) // UnaryOp ⟨primary⟩
+		}
+		return terex.Elem(l.Cdar()) // ⟨primary⟩ → ⟨atom⟩
+	}
+	secondaryOp = makeASTTermR("secondary", "secondary")
+	secondaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨secondary⟩ → ⟨primary⟩
+		//     | ⟨secondary⟩ PrimaryOp ⟨primary⟩
+		T().Infof("secondary tree = ")
+		terex.Elem(l).Dump(tracing.LevelInfo)
+		if singleArg(l) {
+			return terex.Elem(l.Cdar()) // ⟨secondary⟩ → ⟨primary⟩
+		}
+		// ⟨secondary⟩ PrimaryOp ⟨primary⟩ ⇒ ( PrimaryOp ⟨secondary⟩ ⟨primary⟩ )
+		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
+		c := terex.Cons(opAtom, terex.Cons(l.Cdar(), l.Last()))
+		return terex.Elem(c)
+	}
 }
 
 func withoutArgs(l *terex.GCons) bool {
@@ -276,6 +300,14 @@ func singleArg(l *terex.GCons) bool {
 	return l != nil && l.Length() == 2
 }
 
+// TAG is given by the scanner as
+//
+//     tag ( "." tag )*
+//
+// This is done to get fewer prefixes and therefore slightly simpler parse trees.
+// We have to split these up into a list of suffixes.
+// TODO Ignore leading and trailing dots, allow for ', e.g. a.r'
+//
 func makeTagSuffixes(arg terex.Element, env *terex.Environment) *terex.GCons {
 	tok := arg.AsAtom()
 	T().Infof("TAG = %v", tok)         // TAG is []string, e.g. "a.r" ⇒ "a", "r"
@@ -294,6 +326,9 @@ func makeTagSuffixes(arg terex.Element, env *terex.Environment) *terex.GCons {
 }
 
 // === Terminal tokens =======================================================
+
+// TODO change signature to func(atom) => atom
+// env not needed
 
 func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Element {
 	if !el.IsAtom() {
@@ -318,8 +353,7 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 	case tokenIds["STRING"]:
 		if (len(token.Lexeme)) <= 2 {
 			t.Value = ""
-		} else { // trim off "…"
-			//runes := []rune(string(token.Lexeme))  // unnecessary
+		} else { // trim off "…" ⇒ …
 			t.Value = string(token.Lexeme[1 : len(token.Lexeme)-1])
 		}
 	case tokenIds["TAG"]: // return []string value, split at '.'
@@ -332,6 +366,12 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 		}
 		t.Value = tags
 		T().Debugf("TAG = %v", t.Value)
+	case tokenIds["NullaryOp"]:
+		fallthrough
+	case tokenIds["UnaryOp"]:
+		fallthrough
+	case tokenIds["PrimaryOp"]:
+		t.Value = string(token.Lexeme)
 	default:
 	}
 	return el
@@ -345,6 +385,57 @@ func splitTagName(tagname string) ([]string, error) {
 	t = strings.Split(tagname, ".")
 	return t, nil
 }
+
+// --- Operator wrapper ------------------------------------------------------
+
+type wrapOp struct {
+	terminalToken *terex.Token
+}
+
+func (w wrapOp) String() string {
+	return "#" + w.Opname() + ":" + w.terminalToken.Name
+	// will result in "##<opname>:<op-category>"
+}
+
+func (w wrapOp) Opname() string {
+	return w.terminalToken.Value.(string)
+}
+
+func wrapOpToken(a terex.Atom) terex.Operator {
+	a = convertTerminalToken(terex.Elem(a), nil).AsAtom()
+	if a.Data == nil {
+		tokname := a.Data.(*terex.Token).Name
+		panic(fmt.Sprintf("value of token '%s' is nil, not operator name", tokname))
+	}
+	tok := a.Data.(*terex.Token)
+	return wrapOp{terminalToken: tok}
+}
+
+// Call delegates the operator call to a symbol in the environment.
+// The symbol is searched for with the literal value of the operator.
+func (w wrapOp) Call(e terex.Element, env *terex.Environment) terex.Element {
+	return callFromEnvironment(w.Opname(), e, env)
+}
+
+var _ terex.Operator = &wrapOp{}
+
+func callFromEnvironment(opname string, e terex.Element, env *terex.Environment) terex.Element {
+	opsym := env.FindSymbol(opname, true)
+	if opsym == nil {
+		T().Errorf("Cannot find parsing operation %s", opname)
+		return e
+	}
+	operator, ok := opsym.Value.AsAtom().Data.(terex.Operator)
+	if !ok {
+		T().Errorf("Cannot call parsing operation %s", opname)
+		return e
+	}
+	return operator.Call(e, env)
+}
+
+// --- Symbol resolver -------------------------------------------------------
+
+// TODO This is probably unnecessary
 
 type symbolPreservingResolver struct{}
 

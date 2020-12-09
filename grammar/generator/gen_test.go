@@ -75,6 +75,8 @@ func makeRule(lhs string, rhs string) string {
 			} else {
 				r = r + fmt.Sprintf(".N(\"%s\")", x)
 			}
+			// } else if strings.HasPrefix(x, "$") { // $keyword
+			// 	r = r + fmt.Sprintf(`.T("$",%s)`, x[1:])
 		} else { // terminal
 			if len(x) == 0 {
 				continue

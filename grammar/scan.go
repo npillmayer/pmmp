@@ -46,17 +46,17 @@ import (
 
 // Token values for operators on different grammar levels
 const (
-	UnaryOp         int = 2
-	NullaryOp       int = 3
-	PrimaryOp       int = 4
-	SecondaryOp     int = 5
-	RelationOp      int = 6
-	AssignOp        int = 7
-	OfOp            int = 8
-	UnaryTransform  int = 9
-	BinaryTransform int = 10
-	Type            int = 12
-	Keyword         int = 1000
+	UnaryOp         int = -15
+	NullaryOp       int = -16
+	PrimaryOp       int = -17
+	SecondaryOp     int = -18
+	RelationOp      int = -19
+	AssignOp        int = -20
+	OfOp            int = -21
+	UnaryTransform  int = -22
+	BinaryTransform int = -23
+	Type            int = -24
+	Keyword         int = -30
 )
 
 // The tokens representing literal one-char lexemes
@@ -122,6 +122,16 @@ func initTokens() {
 		tokenIds["TAG"] = scanner.Ident
 		tokenIds["NUMBER"] = scanner.Float
 		tokenIds["STRING"] = scanner.String
+		tokenIds["NullaryOp"] = NullaryOp
+		tokenIds["UnaryOp"] = UnaryOp
+		tokenIds["PrimaryOp"] = PrimaryOp
+		tokenIds["SecondaryOp"] = SecondaryOp
+		tokenIds["AssignOp"] = AssignOp
+		tokenIds["OfOp"] = OfOp
+		tokenIds["UnaryTransform"] = UnaryTransform
+		tokenIds["BinaryTransform"] = BinaryTransform
+		tokenIds["Type"] = Type
+		tokenIds["Keyword"] = Keyword
 		for _, lit := range literals {
 			r := lit[0]
 			tokenIds[lit] = int(r)
@@ -227,5 +237,6 @@ func S(lexeme string) (string, int) {
 	if t, ok := tokenIds[lexeme]; ok { // is a keyword
 		return lexeme, t
 	}
-	return lexeme, tokenIds["TAG"] // this should not happen
+	panic("did not find token value for lexeme")
+	//return lexeme, tokenIds["TAG"] // this should not happen
 }

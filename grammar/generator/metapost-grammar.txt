@@ -1,8 +1,13 @@
 
+⟨secondary⟩ → ⟨primary⟩ 
+	| ⟨secondary⟩  PrimaryOp  ⟨primary⟩ 
+
 ⟨primary⟩ → ⟨atom⟩ 
+	| UnaryOp  ⟨primary⟩ 
 
 ⟨atom⟩ → ⟨variable⟩ 
 	| NUMBER
+	| NullaryOp
 
 ⟨variable⟩ → TAG ⟨suffix⟩ 
 
@@ -36,8 +41,6 @@ STOP -----------------------------------------------
 	| z ⟨suffix⟩ 
 	| ⟨numeric atom⟩ [ ⟨expression⟩ , ⟨expression⟩ ]
 	| ⟨scalar multiplication op⟩  ⟨primary⟩ 
-
-STOP -----------------------------------------------
 
 ⟨secondary⟩ → ⟨primary⟩ 
 	| ⟨secondary⟩  ⟨primary binop⟩  ⟨primary⟩ 
