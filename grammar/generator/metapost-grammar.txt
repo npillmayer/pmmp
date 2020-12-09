@@ -6,15 +6,20 @@
 
 ⟨tertiary⟩ → ⟨secondary⟩ 
 	| ⟨tertiary⟩  SecondaryOp  ⟨secondary⟩ 
+	| ⟨tertiary⟩  PlusOrMinus  ⟨secondary⟩ 
 
 ⟨secondary⟩ → ⟨primary⟩ 
 	| ⟨secondary⟩  PrimaryOp  ⟨primary⟩ 
 
 ⟨primary⟩ → ⟨atom⟩ 
 	| UnaryOp  ⟨primary⟩ 
+	| PlusOrMinus  ⟨primary⟩ 
 
 ⟨atom⟩ → ⟨variable⟩ 
-	| NUMBER
+	| Signed ⟨variable⟩ 
+	| Unsigned ⟨variable⟩ 
+	| Signed
+	| Unsigned
 	| NullaryOp
 	| ( ⟨expression⟩ )
 
@@ -24,8 +29,8 @@
 	| ⟨suffix⟩ ⟨subscript⟩ 
 	| ⟨suffix⟩ TAG 
 
-⟨subscript⟩ → NUMBER 
-#	| [ ⟨numeric expression⟩ ]
+⟨subscript⟩ → Unsigned 
+	| [ ⟨expression⟩ ]
 
 
 STOP -----------------------------------------------

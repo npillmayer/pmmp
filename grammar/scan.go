@@ -37,8 +37,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  */
 import (
 	"fmt"
 	"sync"
+	"unicode"
 
 	"github.com/npillmayer/gorgo/lr/scanner"
+	"github.com/npillmayer/gorgo/terex"
 	"github.com/timtadh/lexmachine"
 	lex "github.com/timtadh/lexmachine"
 	"github.com/timtadh/lexmachine/machines"
@@ -46,6 +48,8 @@ import (
 
 // Token values for operators on different grammar levels
 const (
+	Unsigned        int = -10
+	Signed          int = -11
 	UnaryOp         int = -15
 	NullaryOp       int = -16
 	PrimaryOp       int = -17
@@ -55,7 +59,8 @@ const (
 	OfOp            int = -21
 	UnaryTransform  int = -22
 	BinaryTransform int = -23
-	Type            int = -24
+	PlusOrMinus     int = -24
+	Type            int = -25
 	Keyword         int = -30
 )
 
@@ -78,7 +83,8 @@ var nullOps = []string{
 	"pencircle", "true", "whatever",
 }
 var primOps = []string{`\*`, `\/`, `\*\*`, "and", "dotprod", "div", "mod"}
-var secOps = []string{`\+`, `\-`, `\+\+`, `\+\-\+`, "or", "intersectionpoint"}
+var secOps = []string{`\+\+`, `\+\-\+`, "or", "intersectionpoint"}
+var sign = []string{`\+`, `\-`}
 var relOps = []string{
 	`=`, `<`, `>`, `≤`, `≥`, `≠`, `<=`, `>=`, `!=`, `<>`,
 	`\&`, "cutbefore", "cutafter",
@@ -120,8 +126,10 @@ func initTokens() {
 		tokenIds = make(map[string]int)
 		tokenIds["COMMENT"] = scanner.Comment
 		tokenIds["TAG"] = scanner.Ident
-		tokenIds["NUMBER"] = scanner.Float
 		tokenIds["STRING"] = scanner.String
+		tokenIds["NUMBER"] = scanner.Float
+		tokenIds["Signed"] = Signed
+		tokenIds["Unsigned"] = Unsigned
 		tokenIds["NullaryOp"] = NullaryOp
 		tokenIds["UnaryOp"] = UnaryOp
 		tokenIds["PrimaryOp"] = PrimaryOp
@@ -131,6 +139,7 @@ func initTokens() {
 		tokenIds["OfOp"] = OfOp
 		tokenIds["UnaryTransform"] = UnaryTransform
 		tokenIds["BinaryTransform"] = BinaryTransform
+		tokenIds["PlusOrMinus"] = PlusOrMinus
 		tokenIds["Type"] = Type
 		tokenIds["Keyword"] = Keyword
 		for _, lit := range literals {
@@ -164,6 +173,9 @@ func initTokens() {
 		for _, tr := range binTransf {
 			tokenIds[tr] = BinaryTransform
 		}
+		for _, s := range sign {
+			tokenIds[s] = PlusOrMinus
+		}
 		for _, t := range types {
 			tokenIds[t] = Type
 		}
@@ -188,12 +200,12 @@ func Lexer() (*scanner.LMAdapter, error) {
 	init := func(lexer *lexmachine.Lexer) {
 		lexer.Add([]byte(`%[^\n]*\n?`), scanner.Skip) // skip comments
 		lexer.Add([]byte(`\"[^"]*\"`), makeToken("STRING"))
-		lexer.Add([]byte(`[\+\-]?[0-9]+(\.[0-9]+)?`), makeToken("NUMBER")) // float
-		lexer.Add([]byte(`[\+\-]?[0-9]+(\/[0-9]+)?`), makeToken("NUMBER")) // fraction
-		lexer.Add([]byte(`([a-z]|[A-Z]|')+`), makeSymbol())
-		lexer.Add([]byte(`([a-z]|[A-Z]|')+(\.([a-z|[A-Z]|')+)+`), makeSymbol())
-		// lexer.Add([]byte(`([a-z]|[A-Z])+`), makeToken("TAG"))
-		// lexer.Add([]byte(`([a-z]|[A-Z])+(\.([a-z|[A-Z])+)+`), makeToken("TAG"))
+		lexer.Add([]byte(`[\+\-]\d+(\.\d+)?`), makeToken("Signed")) // float
+		lexer.Add([]byte(`[\+\-]\d+(/\d+)?`), makeToken("Signed"))  // fraction
+		lexer.Add([]byte(`\d+(\.\d+)?`), makeToken("Unsigned"))     // float
+		lexer.Add([]byte(`\d+(/\d+)?`), makeToken("Unsigned"))      // fraction
+		lexer.Add([]byte(`([a-zA-Z']|')+`), makeSymbol())
+		lexer.Add([]byte(`([a-zA-Z'])+(\.([a-zA-Z'])+)+`), makeSymbol())
 		lexer.Add([]byte(`( |\t|\n|\r)+`), scanner.Skip) // skip whitespace
 	}
 	alltoks := append(nullOps, unaryOps...)
@@ -205,6 +217,7 @@ func Lexer() (*scanner.LMAdapter, error) {
 	alltoks = append(alltoks, unTransf...)
 	alltoks = append(alltoks, binTransf...)
 	alltoks = append(alltoks, types...)
+	alltoks = append(alltoks, sign...)
 	alltoks = append(alltoks, keywords...)
 	T().Debugf("all keywords: %v", alltoks)
 	adapter, err := scanner.NewLMAdapter(init, literals, alltoks, tokenIds)
@@ -240,4 +253,42 @@ func S(lexeme string) (string, int) {
 	}
 	panic(fmt.Sprintf("did not find token value for lexeme '%s'", lexeme))
 	//return lexeme, tokenIds["TAG"] // this should not happen
+}
+
+// TODO:
+//
+// ⟨scalar multiplication op⟩ → +
+//     | −
+//     | ⟨‘ ⟨number or fraction⟩ ’ not followed by ‘ ⟨add op⟩  ⟨number⟩ ’⟩
+//
+func numberToken(s *lex.Scanner, m *machines.Match) (interface{}, error) {
+	lexeme := string(m.Bytes)
+	for tc := s.TC; tc < len(s.Text); tc++ { // do not change s.TC
+		if unicode.IsSpace(rune(s.Text[tc])) {
+			continue
+		}
+		if unicode.IsLetter(rune(s.Text[tc])) {
+			return s.Token(tokenIds["ScalarMulOp"], lexeme, m), nil
+		}
+		break
+	}
+	return s.Token(tokenIds["NUMBER"], lexeme, m), nil
+}
+
+// makeLMToken creates an ad-hoc terminal token.
+// Use like this:
+//
+//     makeLMToken("PrimaryOp", "*")
+//
+func makeLMToken(tokcat string, lexeme string) *terex.Token {
+	lmtok := &lexmachine.Token{
+		Lexeme: []byte(lexeme),
+		Type:   tokenIds[tokcat],
+		Value:  nil,
+	}
+	return &terex.Token{
+		Name:  lexeme,
+		Token: lmtok,
+		Value: lexeme,
+	}
 }

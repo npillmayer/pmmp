@@ -66,19 +66,25 @@ func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 	b.LHS("subexpression").N("tertiary").End()
 	b.LHS("tertiary").N("secondary").End()
 	b.LHS("tertiary").N("tertiary").T(S("SecondaryOp")).N("secondary").End()
+	b.LHS("tertiary").N("tertiary").T(S("PlusOrMinus")).N("secondary").End()
 	b.LHS("secondary").N("primary").End()
 	b.LHS("secondary").N("secondary").T(S("PrimaryOp")).N("primary").End()
 	b.LHS("primary").N("atom").End()
 	b.LHS("primary").T(S("UnaryOp")).N("primary").End()
+	b.LHS("primary").T(S("PlusOrMinus")).N("primary").End()
 	b.LHS("atom").N("variable").End()
-	b.LHS("atom").T(S("NUMBER")).End()
+	b.LHS("atom").T(S("Signed")).N("variable").End()
+	b.LHS("atom").T(S("Unsigned")).N("variable").End()
+	b.LHS("atom").T(S("Signed")).End()
+	b.LHS("atom").T(S("Unsigned")).End()
 	b.LHS("atom").T(S("NullaryOp")).End()
 	b.LHS("atom").T("(", 40).N("expression").T(")", 41).End()
 	b.LHS("variable").T(S("TAG")).N("suffix").End()
 	b.LHS("suffix").Epsilon()
 	b.LHS("suffix").N("suffix").N("subscript").End()
 	b.LHS("suffix").N("suffix").T(S("TAG")).End()
-	b.LHS("subscript").T(S("NUMBER")).End()
+	b.LHS("subscript").T(S("Unsigned")).End()
+	b.LHS("subscript").T("[", 91).N("expression").T("]", 93).End()
 
 	g, err := b.Grammar()
 	if err != nil {
@@ -232,11 +238,17 @@ func initRewriters() {
 		//     | ( ⟨expression⟩ )
 		T().Infof("atom tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
-		if keywordArg(l) { // NUMBER | NullaryOp
-			convertTerminalToken(terex.Elem(l.Cdar()), env)
+		if singleArg(l) { // ⟨variable⟩
+			if keywordArg(l) { // NUMBER | NullaryOp
+				convertTerminalToken(terex.Elem(l.Cdar()), env)
+				return terex.Elem(l.Cdar())
+			}
 			return terex.Elem(l.Cdar())
-		} else if singleArg(l) { // ⟨variable⟩
-			return terex.Elem(l.Cdar())
+		}
+		if tokenArg(l) { // NUMBER ⟨variable⟩ ⇒ (* NUMBER ⟨variable⟩ )
+			// invent an ad-hoc multiplication token
+			op := wrapOpToken(terex.Atomize(makeLMToken("PrimaryOp", "*")))
+			return terex.Elem(terex.List(op, l.Cdar(), l.Cddar()))
 		}
 		return terex.Elem(l.Cddar()) // ( ⟨expression⟩ ) ⇒ ⟨expression⟩
 	}
@@ -293,11 +305,17 @@ func initRewriters() {
 	primaryOp = makeASTTermR("primary", "primary")
 	primaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨primary⟩ → ⟨atom⟩ | UnaryOp ⟨primary⟩
+		//     | ⟨scalar multiplication op⟩  ⟨primary⟩
 		T().Infof("primary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
-		if !singleArg(l) { // ⟨primary⟩ → UnaryOp ⟨primary⟩
+		if !singleArg(l) {
+			if keywordArg(l) { // ⟨primary⟩ → UnaryOp ⟨primary⟩
+				opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+				return terex.Elem(terex.Cons(opAtom, l.Cddr())) // UnaryOp ⟨primary⟩
+			}
+			// ⟨primary⟩ → ⟨scalar multiplication op⟩  ⟨primary⟩
 			opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
-			return terex.Elem(terex.Cons(opAtom, l.Cddr())) // UnaryOp ⟨primary⟩
+			return terex.Elem(terex.Cons(opAtom, l.Cddr()))
 		}
 		return terex.Elem(l.Cdar()) // ⟨primary⟩ → ⟨atom⟩
 	}

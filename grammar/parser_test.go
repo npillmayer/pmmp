@@ -32,7 +32,9 @@ func TestParseSecondary(t *testing.T) {
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
-	parse("a*b", false, t)
+	//parse("a*b", false, t)
+	parse("-a", false, t)
+	t.Fail()
 }
 
 func TestVariableAST(t *testing.T) {
@@ -81,8 +83,7 @@ func TestExpr1AST(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
-	compile("x' < -1/4", t)
-	t.Fail()
+	compile("x.r' < -1/4", t)
 }
 
 func TestExpr2AST(t *testing.T) {
@@ -90,7 +91,6 @@ func TestExpr2AST(t *testing.T) {
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	compile("x < (1 + 2)", t)
-	t.Fail()
 }
 
 // ---------------------------------------------------------------------------
