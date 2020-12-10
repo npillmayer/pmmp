@@ -27,14 +27,25 @@ func TestParseAtom(t *testing.T) {
 	parse("true", false, t)
 }
 
-func TestParseSecondary(t *testing.T) {
+func TestParseTertiary(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
-	//parse("a*b", false, t)
-	parse("-a", false, t)
-	t.Fail()
+	parse("7 - -a1r", false, t) // parser sees: 7 - - a 1 r
+}
+
+func TestParseList(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	parse("a.r1b", false, t)
+	parse("true", false, t)
+	parse("1/2", false, t)
+	parse("xpart z", false, t)
+	parse("a * xpart z", false, t)
+	parse("x.r' < -1/4", false, t)
 }
 
 func TestVariableAST(t *testing.T) {

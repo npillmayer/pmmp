@@ -334,7 +334,9 @@ func initRewriters() {
 	}
 	tertiaryOp = makeASTTermR("tertiary", "tertiary")
 	tertiaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨tertiary⟩ → ⟨secondary⟩ | ⟨tertiary⟩  ⟨secondary binop⟩  ⟨secondary⟩
+		// ⟨tertiary⟩ → ⟨secondary⟩
+		//     | ⟨tertiary⟩  SecondaryOp  ⟨secondary⟩
+		//     | ⟨tertiary⟩  PlusOrMinus  ⟨secondary⟩
 		T().Infof("tertiary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) {
@@ -463,6 +465,7 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 	case tokenIds["RelationOp"]:
 		t.Value = string(token.Lexeme)
 	default:
+		t.Value = string(token.Lexeme)
 	}
 	return el
 }
@@ -483,8 +486,8 @@ type wrapOp struct {
 }
 
 func (w wrapOp) String() string {
-	return "#" + w.Opname() + ":" + w.terminalToken.Name
 	// will result in "##<opname>:<op-category>"
+	return "#" + w.Opname() + ":" + w.terminalToken.Name
 }
 
 func (w wrapOp) Opname() string {
@@ -493,7 +496,7 @@ func (w wrapOp) Opname() string {
 
 func wrapOpToken(a terex.Atom) terex.Operator {
 	a = convertTerminalToken(terex.Elem(a), nil).AsAtom()
-	if a.Data == nil {
+	if a.Data == nil || a.Data.(*terex.Token).Value == nil {
 		tokname := a.Data.(*terex.Token).Name
 		panic(fmt.Sprintf("value of token '%s' is nil, not operator name", tokname))
 	}
