@@ -7,5 +7,5 @@ to GoRGO as test case for GoRGO's shortcomings.
 I don't strive for fancy graphics, but rather aim at simple figures like this
 one:
 
-<img src="http://npillmayer.github.io/img/mp-example.png" alt="MetaPost Example"
-    width="350px" style="max-width:350px"/>
+<img src="http://npillmayer.github.io/GoRGO/img/MP-Example.png" alt="MetaPost Example"
+    width="450px" style="max-width:350px"/>
