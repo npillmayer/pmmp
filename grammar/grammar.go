@@ -70,6 +70,7 @@ func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 	b.LHS("secondary").N("primary").End()
 	b.LHS("secondary").N("secondary").T(S("PrimaryOp")).N("primary").End()
 	b.LHS("primary").N("atom").End()
+	b.LHS("primary").T("(", 40).N("numeric_expression").T(",", 44).N("numeric_expression").T(")", 41).End()
 	b.LHS("primary").T(S("UnaryOp")).N("primary").End()
 	b.LHS("primary").T(S("PlusOrMinus")).N("primary").End()
 	b.LHS("atom").N("variable").End()
@@ -306,16 +307,18 @@ func initRewriters() {
 	primaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨primary⟩ → ⟨atom⟩ | UnaryOp ⟨primary⟩
 		//     | ⟨scalar multiplication op⟩  ⟨primary⟩
+		//     | ( ⟨numeric expression⟩ , ⟨numeric expression⟩ )
 		T().Infof("primary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if !singleArg(l) {
-			if keywordArg(l) { // ⟨primary⟩ → UnaryOp ⟨primary⟩
+			if l.Length() == 3 {
+				// ⟨primary⟩ → UnaryOp ⟨primary⟩
+				// ⟨primary⟩ → ⟨scalar multiplication op⟩  ⟨primary⟩
 				opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
 				return terex.Elem(terex.Cons(opAtom, l.Cddr())) // UnaryOp ⟨primary⟩
 			}
-			// ⟨primary⟩ → ⟨scalar multiplication op⟩  ⟨primary⟩
-			opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
-			return terex.Elem(terex.Cons(opAtom, l.Cddr()))
+			// ⟨primary⟩ → ( ⟨numeric expression⟩ , ⟨numeric expression⟩ )
+			// create a pair
 		}
 		return terex.Elem(l.Cdar()) // ⟨primary⟩ → ⟨atom⟩
 	}

@@ -7,6 +7,7 @@
 	b.LHS("secondary").N("primary").End()
 	b.LHS("secondary").N("secondary").T(S("PrimaryOp")).N("primary").End()
 	b.LHS("primary").N("atom").End()
+	b.LHS("primary").T("(", 40).N("numeric_expression").T(",", 44).N("numeric_expression").T(")", 41).End()
 	b.LHS("primary").T(S("UnaryOp")).N("primary").End()
 	b.LHS("primary").T(S("PlusOrMinus")).N("primary").End()
 	b.LHS("atom").N("variable").End()

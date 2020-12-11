@@ -21,7 +21,7 @@ For further information please refer to types Scripting and LuaVarRef.
 
 BSD License
 
-Copyright (c) 2017–18, Norbert Pillmayer
+Copyright (c) 2017–21, Norbert Pillmayer
 
 All rights reserved.
 
@@ -55,16 +55,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 package corelang
 
-//go:generate antlr -Dlanguage=Go -o grammar -lib . -package grammar -Werror CoreLang.g4
+import (
+	"github.com/npillmayer/schuko/gtrace"
+	"github.com/npillmayer/schuko/tracing"
+)
 
-import "github.com/npillmayer/schuko/tracing"
-
-// Trace to the InterpreterTracer
+// T traces to the global interpreter tracer
 func T() tracing.Trace {
-	return tracing.InterpreterTracer
+	return gtrace.InterpreterTracer
 }
 
-// Trace to the ScriptingTracer
+// S traces to the global scripting tracer
 func S() tracing.Trace {
-	return tracing.ScriptingTracer
+	return gtrace.ScriptingTracer
 }

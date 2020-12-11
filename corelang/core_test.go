@@ -4,14 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/npillmayer/schuko/tracing"
-	"github.com/npillmayer/pmmp/runtime"
-	"github.com/npillmayer/pmmp/variables"
 	lua "github.com/yuin/gopher-lua"
 )
 
 func TestLuaInit(t *testing.T) {
-	T.SetLevel(tracing.LevelDebug)
 	L := NewScripting(nil)
 	if L == nil {
 		t.Fail()
@@ -37,7 +33,7 @@ func TestLuaEval2(t *testing.T) {
 
 func TestLuaArgs1(t *testing.T) {
 	a := asScriptingArgs(1, "hello")
-	T.Debugf("args = %v", a)
+	T().Debugf("args = %v", a)
 	if len(a) != 2 {
 		t.Fail()
 	}
@@ -45,24 +41,23 @@ func TestLuaArgs1(t *testing.T) {
 
 func TestLuaArgs2(t *testing.T) {
 	a := asScriptingArgs(1, "hello")
-	T.Debugf("args  = %v", a)
+	T().Debugf("args  = %v", a)
 	lv := forLua(a)
-	T.Debugf("largs = %v", lv)
+	T().Debugf("largs = %v", lv)
 	if len(lv) != 2 {
 		t.Fail()
 	}
 }
 
-func TestLuaHook(t *testing.T) {
-	T.SetLevel(tracing.LevelDebug)
-	l := NewScripting(nil)
-	l.RegisterHook("hello", ping)
-	r, _ := l.CallHook("hello")
-	T.Debugf("r = %v", r)
-	if r[0] != "ok" {
-		t.Fail()
-	}
-}
+// func TestLuaHook(t *testing.T) {
+// 	l := NewScripting(nil)
+// 	l.RegisterHook("hello", ping)
+// 	r, _ := l.CallHook("hello")
+// 	T().Debugf("r = %v", r)
+// 	if r[0] != "ok" {
+// 		t.Fail()
+// 	}
+// }
 
 func TestLuaHook2(t *testing.T) {
 	scripting := NewScripting(nil)
@@ -90,17 +85,17 @@ func ExampleScripting_hook() {
 func TestUserDataPair(t *testing.T) {
 	l := NewScripting(nil)
 	l.registerPairType()
-	T.Debug("----------------------------------------")
 	l.Eval(`p = pair.new{1, 1}`)
 	l.Eval(`p:x(4)`)
 	l.Eval(`print(p:x())`)
 }
 
+/*
+
 func TestUserDataVarRef(t *testing.T) {
-	l := NewScripting(runtime.NewRuntimeEnvironment(variables.NewPMMPVarDecl))
+	l := NewScripting(runtime.NewRuntimeEnvironment(variables.NewVarDecl))
 	l.registerDSLRuntimeEnvType()
 	l.registerVarRefType()
-	T.Debug("----------------------------------------")
 	l.Eval(`
         a = varref.refer_to("a2r")
         a:value(7)
@@ -109,10 +104,9 @@ func TestUserDataVarRef(t *testing.T) {
 }
 
 func TestUserDataRuntime(t *testing.T) {
-	l := NewScripting(runtime.NewRuntimeEnvironment(variables.NewPMMPVarDecl))
+	l := NewScripting(runtime.NewRuntimeEnvironment(variables.NewVarDecl))
 	l.registerDSLRuntimeEnvType()
 	l.registerVarRefType()
-	T.Debug("----------------------------------------")
 	l.Eval(`rt = runtime.current`)
 	l.Eval(`x = rt.connect_variable("x")`)
 	l.Eval(`print(x)`)
@@ -122,3 +116,5 @@ func TestUserDataRuntime(t *testing.T) {
 	l.Eval(`print("x="..x:value())`)
 	l.Eval(`print(x:isknown())`)
 }
+
+*/

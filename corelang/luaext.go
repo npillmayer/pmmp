@@ -3,9 +3,8 @@ package corelang
 import (
 	"fmt"
 
-	"github.com/npillmayer/arithm"
-	"github.com/npillmayer/tyse/core/locate"
-	"github.com/npillmayer/pmmp/runtime"
+	"github.com/npillmayer/arithm/polyn"
+	"github.com/npillmayer/gorgo/runtime"
 	"github.com/npillmayer/pmmp/variables"
 	"github.com/shopspring/decimal"
 	lua "github.com/yuin/gopher-lua"
@@ -14,7 +13,7 @@ import (
 // ---------------------------------------------------------------------------
 
 /*
-Type Scripting is an opaque data type to provide access to the
+Scripting is an opaque data type to provide access to the
 scripting sub-system.
 
 DSLs built on top of this language core may be scripted with Lua.
@@ -34,7 +33,8 @@ type Scripting struct {
 	runtime *runtime.Runtime
 }
 
-// Create a new scripting subsystem. Scripting sub-systems are not thread safe.
+// NewScripting creates a
+// new scripting subsystem. Scripting sub-systems are not thread safe.
 func NewScripting(rt *runtime.Runtime) *Scripting {
 	luastate := lua.NewState()
 	if luastate == nil {
@@ -42,9 +42,14 @@ func NewScripting(rt *runtime.Runtime) *Scripting {
 		return nil
 	}
 	T().Infof("Loading initial Lua scripts")
-	hostlang := gtlocate.FileResource("hostlang", "lua")
+	hostlang, err := Asset("lua/hostlang.lua")
+	if err != nil {
+		T().Errorf("Cannot locate Lua hostlang script")
+		return nil
+	}
 	T().Infof("- %s", hostlang)
-	luastate.DoFile(hostlang)
+	//luastate.DoFile(hostlang)
+	luastate.DoString(string(hostlang[:]))
 	luastate.DoString("hostlang = HostLang")
 	scr := &Scripting{luastate, nil, rt}
 	scr.registerDSLRuntimeEnvType()
@@ -105,16 +110,16 @@ func isUserData(lv lua.LValue) (*lua.LUserData, bool) {
 	return nil, false
 }
 
-func isVariable(lv lua.LValue) (*runtime.ExprNode, *variables.PMMPVarRef, bool) {
+func isVariable(lv lua.LValue) (*ExprNode, *variables.VarRef, bool) {
 	if udata, ok := isUserData(lv); ok {
 		if v, isvref := udata.Value.(*LuaVarRef); isvref {
-			var e *runtime.ExprNode
+			var e *ExprNode
 			if v.vref.IsPair() {
 				x := v.vref.XPart()
 				y := v.vref.YPart()
-				e = runtime.NewPairVarExpression(x, y)
+				e = NewPairVarExpression(x.AsTag(), y.AsTag())
 			} else {
-				e = runtime.NewNumericVarExpression(v.vref)
+				e = NewNumericVarExpression(v.vref.AsTag())
 			}
 			return e, v.vref, true
 		}
@@ -122,13 +127,12 @@ func isVariable(lv lua.LValue) (*runtime.ExprNode, *variables.PMMPVarRef, bool) 
 	return nil, nil, false
 }
 
-func isNumericConstant(lv lua.LValue) (decimal.Decimal, bool) {
+func isNumericConstant(lv lua.LValue) (float64, bool) {
 	if lv.Type() == lua.LTNumber {
 		f := float64(lv.(lua.LNumber))
-		n := decimal.NewFromFloat(f)
-		return n, true
+		return f, true
 	}
-	return arithmetic.ConstZero, false
+	return 0, false
 }
 
 func isPair(lv lua.LValue) (*LuaPair, bool) {
@@ -140,29 +144,29 @@ func isPair(lv lua.LValue) (*LuaPair, bool) {
 	return nil, false
 }
 
-func isLiteralPair(lv lua.LValue) (*runtime.ExprNode, []*variables.PMMPVarRef, bool) {
-	var vars []*variables.PMMPVarRef = make([]*variables.PMMPVarRef, 2)
+func isLiteralPair(lv lua.LValue) (*ExprNode, []*variables.VarRef, bool) {
+	var vars []*variables.VarRef = make([]*variables.VarRef, 2)
 	if lpr, ok := isPair(lv); ok {
-		var x, y arithmetic.Polynomial
+		var x, y polyn.Polynomial
 		if xc, xisconst := isNumericConstant(lpr.X); xisconst {
-			x = arithmetic.NewConstantPolynomial(xc)
+			x = polyn.NewConstantPolynomial(xc)
 		} else if xv, v, xisvar := isVariable(lpr.X); xisvar {
 			x = xv.XPolyn
 			vars[0] = v
 		} else {
 			T().Errorf("illegal x-part for pair returned from Lua, assuming 0")
-			x = arithmetic.NewConstantPolynomial(arithmetic.ConstZero)
+			x = polyn.NewConstantPolynomial(0)
 		}
 		if yc, yisconst := isNumericConstant(lpr.Y); yisconst {
-			y = arithmetic.NewConstantPolynomial(yc)
+			y = polyn.NewConstantPolynomial(yc)
 		} else if yv, v, yisvar := isVariable(lpr.Y); yisvar {
 			y = yv.XPolyn
 			vars[1] = v
 		} else {
 			T().Errorf("illegal y-part for pair returned from Lua, assuming 0")
-			y = arithmetic.NewConstantPolynomial(arithmetic.ConstZero)
+			y = polyn.NewConstantPolynomial(0)
 		}
-		return runtime.NewPairExpression(x, y), vars, true
+		return NewPairExpression(x, y), vars, true
 	}
 	return nil, vars, false
 }
@@ -177,7 +181,8 @@ func isString(lv lua.LValue) (string, bool) {
 
 // ---------------------------------------------------------------------------
 
-// Type to return values from Lua scripts.
+// ScriptingReturnValues is a
+// type to return values from Lua scripts.
 // Single values are accessed with an iterator.
 //
 // see ScriptingReturnValueIterator
@@ -185,7 +190,8 @@ type ScriptingReturnValues struct {
 	values []lua.LValue
 }
 
-// Iterator type for scripting return values.
+// ScriptingReturnValueIterator is an
+// iterator type for scripting return values.
 // Return values from Lua are wrapped into an opaque type
 // ScriptingReturnValues and accessed using this iterator type.
 //
@@ -195,24 +201,25 @@ type ScriptingReturnValueIterator struct {
 	inx    int
 }
 
-// Create an iterator for scripting arguments / return values.
+// Iterator creates
+// an iterator for scripting arguments / return values.
 func (r *ScriptingReturnValues) Iterator() *ScriptingReturnValueIterator {
 	return &ScriptingReturnValueIterator{r, -1}
 }
 
-// Is there a next scripting argument?
+// Next returns true if ther is a next scripting argument.
 // Advances the iterator's cursor.
 func (it *ScriptingReturnValueIterator) Next() bool {
 	T().Debugf("%d return values to iterate", len(it.values.values))
 	it.inx++
 	if it.inx < len(it.values.values) {
 		return true
-	} else {
-		return false
 	}
+	return false
 }
 
-// Get the value of the scripting argument under the iterator's cursor.
+// Value gets
+// the value of the scripting argument under the iterator's cursor.
 // Returns the value and a type (see package 'variables' for the
 // definition of variable types).
 func (it *ScriptingReturnValueIterator) Value() (interface{}, variables.VariableType) {
@@ -229,37 +236,38 @@ func (it *ScriptingReturnValueIterator) Value() (interface{}, variables.Variable
 	return nil, variables.Undefined
 }
 
-// Get the value of the scripting argument under the iterator's cursor.
+// ValueAsExprNode gets
+// the value of the scripting argument under the iterator's cursor.
 // Returns the value wrapped in an expression node (or nil).
 // If variables are part of the expression(s), they are returned in a
 // separate array.
-func (it *ScriptingReturnValueIterator) ValueAsExprNode() (*runtime.ExprNode, []*variables.PMMPVarRef) {
+func (it *ScriptingReturnValueIterator) ValueAsExprNode() (*ExprNode, []*variables.VarRef) {
 	if it.inx < len(it.values.values) {
 		lv := it.values.values[it.inx]
 		T().Debugf("iterator: value as expression = %v", lv)
 		if lua.LVIsFalse(lv) {
 			T().Errorf("'nil' return value from Lua, substituting numeric 0")
-			p := arithmetic.NewConstantPolynomial(arithmetic.ConstZero)
-			return runtime.NewNumericExpression(p), nil
+			p := polyn.NewConstantPolynomial(0)
+			return NewNumericExpression(p), nil
 		} else if _, ok := isString(lv); ok {
 			T().Errorf("cannot process string return value, substituting numeric 0")
-			p := arithmetic.NewConstantPolynomial(arithmetic.ConstZero)
-			return runtime.NewNumericExpression(p), nil
+			p := polyn.NewConstantPolynomial(0)
+			return NewNumericExpression(p), nil
 		} else if e, v, ok := isVariable(lv); ok {
 			T().Debugf("return values iterator: variable = %v", e)
-			vars := make([]*variables.PMMPVarRef, 1)
+			vars := make([]*variables.VarRef, 1)
 			vars[0] = v
 			return e, vars
 		} else if c, ok := isNumericConstant(lv); ok {
-			p := arithmetic.NewConstantPolynomial(c)
-			return runtime.NewNumericExpression(p), nil
+			p := polyn.NewConstantPolynomial(c)
+			return NewNumericExpression(p), nil
 		} else if e, vxy, ok := isLiteralPair(lv); ok {
 			T().Debugf("return values iterator: literal pair = %v", e)
 			return e, vxy
 		} else {
 			T().Errorf("unknown return value from Lua, substituting numeric 0")
-			p := arithmetic.NewConstantPolynomial(arithmetic.ConstZero)
-			return runtime.NewNumericExpression(p), nil
+			p := polyn.NewConstantPolynomial(0)
+			return NewNumericExpression(p), nil
 		}
 	}
 	return nil, nil
@@ -268,7 +276,7 @@ func (it *ScriptingReturnValueIterator) ValueAsExprNode() (*runtime.ExprNode, []
 // ---------------------------------------------------------------------------
 
 /*
-Register a hook function for a key given as string parameter. The
+RegisterHook registers a hook function for a key given as string parameter. The
 hook function must accept a single argument: the Lua state, and return
 a single int: the number of return values on the Lua stack.
 
@@ -294,7 +302,7 @@ func (lscript *Scripting) RegisterHook(name string, f lua.LGFunction) {
 }
 
 /*
-Call a registered hook from Go. Arguments may be passed (Go data types) in
+CallHook calls a registered hook from Go. Arguments may be passed (Go data types) in
 a variable argument list. Return values are converted back from Lua types to
 Go types.
 
@@ -354,7 +362,8 @@ func (lscript *Scripting) returnFromScripting(n int) *ScriptingReturnValues {
 }
 
 /*
-Evaluate a Lua statement, given as string. Return arguments (from the Lua stack)
+Eval evaluates a Lua statement,
+given as string. Return arguments (from the Lua stack)
 are packed into an opaque data structure. The second return value is a possible
 error condition. The Lua command(s) must be syntactically correct and complete
 statements (no expressions etc. accepted).
@@ -435,7 +444,7 @@ func lua_z(L *lua.LState) int {
 const luaPairTypeName = "pair"
 
 /*
-Lua UserData type for pairs.
+LuaPair is a Lua UserData type for pairs.
 
 Example (Lua):
 
@@ -501,10 +510,10 @@ func pairGetSetX(L *lua.LState) int {
 	if L.GetTop() == 2 { // setter
 		p.X = L.CheckAny(2)
 		return 0
-	} else { // getter
-		L.Push(p.X)
-		return 1
 	}
+	// else getter
+	L.Push(p.X)
+	return 1
 }
 
 // Getter and setter for pair#y
@@ -513,10 +522,10 @@ func pairGetSetY(L *lua.LState) int {
 	if L.GetTop() == 2 { // setter
 		p.Y = L.CheckAny(2)
 		return 0
-	} else { // getter
-		L.Push(p.Y)
-		return 1
 	}
+	// else getter
+	L.Push(p.Y)
+	return 1
 }
 
 // === User Data Type: Variable ==============================================
@@ -524,7 +533,7 @@ func pairGetSetY(L *lua.LState) int {
 const luaVarRefTypeName = "varref"
 
 /*
-Lua UserData type for variables. Variables reference DSL-variables in
+LuaVarRef is a Lua UserData type for variables. Variables reference DSL-variables in
 the DSL's runtime environment (MetaFont-like variables of type numeric, pair,
 etc.) A variable may be known or unknown.
 
@@ -562,7 +571,7 @@ Variables of this kind are 'live'-objects, i.e. they are always synchronous
 between the two languages.
 */
 type LuaVarRef struct {
-	vref *variables.PMMPVarRef
+	vref *variables.VarRef
 }
 
 // Stringer for variable references. Used for varref.__tostring(...).
@@ -570,9 +579,8 @@ type LuaVarRef struct {
 func (lvref *LuaVarRef) String() string {
 	if lvref.vref == nil {
 		return "<undefined variable>"
-	} else {
-		return lvref.vref.String()
 	}
+	return lvref.vref.String()
 }
 
 // Metatable functions for type varref
@@ -618,7 +626,7 @@ func referToVar(L *lua.LState) int {
 
 // Create a LuaVarRef UserData wrapper for a variable reference.
 // Sets the correct metatable for the variable.
-func newVarRefUserData(L *lua.LState, vref *variables.PMMPVarRef) *lua.LUserData {
+func newVarRefUserData(L *lua.LState, vref *variables.VarRef) *lua.LUserData {
 	vudata := L.NewUserData()
 	lvref := &LuaVarRef{vref}
 	vudata.Value = lvref
@@ -646,17 +654,16 @@ func varRefGetSetValue(L *lua.LState) int {
 		d := decimal.NewFromFloat(float64(f))
 		v.vref.SetValue(d)
 		return 0
-	} else { // getter
-		val := v.vref.GetValue()
-		if n, ok := val.(decimal.Decimal); ok {
-			lf, _ := n.Float64()
-			L.Push(lua.LNumber(lf))
-		} else {
-			L.Push(lua.LNil)
-		}
-		return 1
 	}
-	return 0
+	// else getter
+	val := v.vref.GetValue()
+	if n, ok := val.(decimal.Decimal); ok {
+		lf, _ := n.Float64()
+		L.Push(lua.LNumber(lf))
+	} else {
+		L.Push(lua.LNil)
+	}
+	return 1
 }
 
 // Function for varref metatable
@@ -681,6 +688,7 @@ func varRef2String(L *lua.LState) int {
 const luaDSLRuntimeTypeName = "runtime"
 
 /*
+DSLRuntimeEnv is a
 Lua UserData type for the DSL's interpreter runtime environment.
 The scripting sub-system has access to variables of the DSL (and therefore
 access to scopes and memory-frames of the runtime environment).
@@ -734,13 +742,12 @@ func runtimeConnectVar(L *lua.LState) int {
 
 func getGlobalDSLRuntimeEnv(L *lua.LState) *DSLRuntimeEnv {
 	mt := L.GetTypeMetatable(luaDSLRuntimeTypeName)
-	if mt != nil {
-		udata := L.GetField(mt, "current").(*lua.LUserData)
-		lrt := udata.Value.(*DSLRuntimeEnv)
-		return lrt
-	} else {
+	if mt == nil {
 		T().P("script", "lua").Errorf("host language runtime env. not found")
 		T().Errorf("Did you pre-load UserData-type 'runtime'?")
 		return nil
 	}
+	udata := L.GetField(mt, "current").(*lua.LUserData)
+	lrt := udata.Value.(*DSLRuntimeEnv)
+	return lrt
 }

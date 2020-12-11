@@ -93,7 +93,8 @@ func (d *VarDecl) Tag() *runtime.Tag {
 	return d.tag
 }
 
-func varDeclFromTag(tag *runtime.Tag) *VarDecl {
+// DeclFromTag returns the declaration represented by a tag.
+func DeclFromTag(tag *runtime.Tag) *VarDecl {
 	return tag.UData.(*VarDecl)
 }
 
@@ -115,6 +116,11 @@ func (s *Suffix) IsBaseDecl() bool {
 // Type returns the variable's type.
 func (s *Suffix) Type() VariableType {
 	return VariableType(s.baseDecl.tag.Type())
+}
+
+// BaseDecl returns the base type declaration for a tag.
+func (s *Suffix) BaseDecl() *VarDecl {
+	return s.baseDecl
 }
 
 // Name gets the isolated name of declaration partial (tag, array or suffix).
@@ -308,20 +314,33 @@ func (v *VarRef) Type() VariableType {
 	return Undefined
 }
 
-func varFromTag(tag *runtime.Tag) *VarRef {
+// Declaration returns the variable reference's base tag declaration.
+func (v *VarRef) Declaration() *VarDecl {
+	return v.decl.baseDecl
+}
+
+// AsTag returns the variable reference as a tag to store it into a symbol table.
+func (v *VarRef) AsTag() *runtime.Tag {
+	return &v.Tag
+}
+
+// VarFromTag returns a tag as a variable reference.
+// If the tag stands for a pair partial, VarFromTag will return a reference
+// to the parent (pair) variable.
+func VarFromTag(tag *runtime.Tag) *VarRef {
 	return tag.UData.(*VarRef)
 }
 
-// GetSuffixesString returns a variable's name without the leading base tag name.
+// SuffixesString returns a variable's name without the leading base tag name.
 // Strip the base tag string off of a variable and return all the suffxies
 // as string.
 //
-// func (v *VarRef) GetSuffixesString() string {
-// 	basetag := v.Decl.baseDecl
-// 	basetagstring := basetag.Name
-// 	fullstring := v.FullName()
-// 	return fullstring[len(basetagstring):]
-// }
+func (v *VarRef) SuffixesString() string {
+	basetag := v.decl.baseDecl
+	basetagstring := basetag.Name()
+	fullstring := v.FullName()
+	return fullstring[len(basetagstring):]
+}
 
 // --- Variable Type Pair ----------------------------------------------------
 
@@ -398,7 +417,13 @@ func (ppart *PairPartRef) Type() VariableType {
 	return NumericType
 }
 
-func ppFromTag(tag *runtime.Tag) *PairPartRef {
+// AsTag returns a pair part as a tag.
+func (ppart *PairPartRef) AsTag() *runtime.Tag {
+	return &ppart.Tag
+}
+
+// PPFromTag returns the pair partial from a tag.
+func PPFromTag(tag *runtime.Tag) *PairPartRef {
 	return tag.UData.(*PairPartRef)
 }
 
@@ -417,7 +442,7 @@ func (v *VarRef) XPart() *PairPartRef {
 		T().P("var", v.Name).Errorf("cannot access x-part of non-pair")
 		return nil
 	}
-	return ppFromTag(v.Sibling)
+	return PPFromTag(v.Sibling)
 }
 
 // YPart gets the y-part of a pair variable
@@ -426,7 +451,7 @@ func (v *VarRef) YPart() *PairPartRef {
 		T().P("var", v.Name).Errorf("cannot access y-part of non-pair")
 		return nil
 	}
-	return ppFromTag(v.Children)
+	return PPFromTag(v.Children)
 }
 
 /*
@@ -490,8 +515,8 @@ func (v *VarRef) SetValue(val interface{}) {
 	T().P("var", v.Name).Debugf("new value: %v", val)
 	v.Value = val
 	if v.IsPair() {
-		var xpart *PairPartRef = ppFromTag(v.Sibling)
-		var ypart *PairPartRef = ppFromTag(v.Children)
+		var xpart *PairPartRef = PPFromTag(v.Sibling)
+		var ypart *PairPartRef = PPFromTag(v.Children)
 		if val == nil {
 			xpart.Value = nil
 			ypart.Value = nil
@@ -511,8 +536,8 @@ func (v *VarRef) SetValue(val interface{}) {
 func (v *VarRef) PullValue() {
 	if v.IsPair() {
 		var ppart1, ppart2 *PairPartRef
-		ppart1 = ppFromTag(v.Sibling)
-		ppart2 = ppFromTag(v.Children)
+		ppart1 = PPFromTag(v.Sibling)
+		ppart2 = PPFromTag(v.Children)
 		if ppart1 != nil && ppart2 != nil {
 			if ppart1.Value != nil && ppart2.Value != nil {
 				v.Value = arithm.P(ppart1.Value.(float64), ppart2.Value.(float64))
