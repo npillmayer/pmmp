@@ -75,24 +75,25 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 // Some symbols are lvalues, i.e. can be assigned a value
-type Assignable interface {
-	GetValue() interface{}
-	SetValue(interface{})
-	IsKnown() bool
-}
+// type Assignable interface {
+// 	GetValue() interface{}
+// 	SetValue(interface{})
+// 	IsKnown() bool
+// }
 
 // === Expressions ===========================================================
 
-/*
-Expressions will contain linear polynomials, possibly with
-variables of unknown value. Expressions are either of type
-pair or type numeric. Numeric expressions are modelled as pair values,
-with the y-part set to 0.
-
-Sometimes it is convenient to push a different type of expression onto
-the stack (or to complement a numeric expression with additional info), so
-expressions are allowed to point to 'other' data (GetOther()).
-*/
+// ExprNode is a node on the expression stack.
+//
+// Expressions will contain linear polynomials, possibly with
+// variables of unknown value. Expressions are either of type
+// pair or type numeric. Numeric expressions are modelled as pair values,
+// with the y-part set to 0.
+//
+// Sometimes it is convenient to push a different type of expression onto
+// the stack (or to complement a numeric expression with additional info), so
+// expressions are allowed to point to 'other' data (GetOther()).
+//
 type ExprNode struct {
 	XPolyn polyn.Polynomial
 	YPolyn polyn.Polynomial
@@ -100,7 +101,6 @@ type ExprNode struct {
 	Other  interface{}
 }
 
-// Stringer for expressions.
 func (e *ExprNode) String() string {
 	if e.Other != nil {
 		return fmt.Sprintf("%v", e.Other)
@@ -111,33 +111,32 @@ func (e *ExprNode) String() string {
 	}
 }
 
-// Create a new expression node given a polynomial.
+// NewNumericExpression creates
+// a new expression node given a polynomial.
 func NewNumericExpression(p polyn.Polynomial) *ExprNode {
 	return &ExprNode{XPolyn: p, IsPair: false}
 }
 
-/*
-Create a new pair expression node. Arguments are x-part and y-part
-for the pair. If no y-part is supplied, the type of the expression will
-still be type pair – although an invalid one.
-*/
+// NewPairExpression creates
+// a new pair expression node. Arguments are x-part and y-part
+// for the pair. If no y-part is supplied, the type of the expression will
+// still be type pair – although an invalid one.
+//
 func NewPairExpression(xp polyn.Polynomial, yp polyn.Polynomial) *ExprNode {
 	return &ExprNode{XPolyn: xp, YPolyn: yp, IsPair: true}
 }
 
-/*
-Create a non-constant numeric expression node.
-*/
+// NewNumericVarExpression creates
+// a non-constant numeric expression node.
 func NewNumericVarExpression(v *runtime.Tag) *ExprNode {
 	p := polyn.NewConstantPolynomial(0)
 	p = p.SetTerm(int(v.ID), 1.0) // p = 0 + 1*v
 	return NewNumericExpression(p)
 }
 
-/*
-Create a non-constant pair expression node. Arguments are x-part and y-part
-for the pair.
-*/
+// NewPairVarExpression creates
+// Create a non-constant pair expression node. Arguments are x-part and y-part
+// for the pair.
 func NewPairVarExpression(xpart *runtime.Tag, ypart *runtime.Tag) *ExprNode {
 	px := polyn.NewConstantPolynomial(0)
 	px = px.SetTerm(int(xpart.ID), 1)
@@ -146,7 +145,8 @@ func NewPairVarExpression(xpart *runtime.Tag, ypart *runtime.Tag) *ExprNode {
 	return NewPairExpression(px, py)
 }
 
-// Create an expression node with other information
+// NewOtherExpression creates
+// create an expression node with other information
 func NewOtherExpression(something interface{}) *ExprNode {
 	e := &ExprNode{}
 	e.Other = something
@@ -180,13 +180,13 @@ func (e *ExprNode) IsPair bool {
 }
 */
 
+// IsValid is a predicate:
 // Is this a valid numeric or pair expression, i.e. non-nil?
 func (e *ExprNode) IsValid() bool {
 	if e.IsPair {
 		return e.XPolyn.Terms != nil && e.YPolyn.Terms != nil
-	} else {
-		return e.XPolyn.Terms != nil
 	}
+	return e.XPolyn.Terms != nil
 }
 
 /*
@@ -196,6 +196,8 @@ func (e *ExprNode) GetOther() interface{} {
 }
 */
 
+// GetConstNumeric gets a float value out of an expresion node,
+// or 0 if it isn't a float, 0.0 and false.
 func (e *ExprNode) GetConstNumeric() (float64, bool) {
 	if e.IsValid() && !e.IsPair {
 		XPart, isxconst := e.XPolyn.IsConstant()
@@ -206,44 +208,44 @@ func (e *ExprNode) GetConstNumeric() (float64, bool) {
 	return 0, false
 }
 
+// GetConstPair gets a pair value out of an expression node.
 func (e *ExprNode) GetConstPair() (arithm.Pair, bool) {
 	if e.IsValid() && e.IsPair {
 		XPart, isxconst := e.XPolyn.IsConstant()
 		YPart, isyconst := e.YPolyn.IsConstant()
 		if isxconst && isyconst {
 			return arithm.P(XPart, YPart), true
-		} else {
-			T().Debugf("expression is not constant: %s", e)
 		}
+		T().Debugf("expression is not constant: %s", e)
 	}
 	return arithm.Origin, false
 }
 
 // === Expression Stack ======================================================
 
-/*
-Type ExprStack. This implements a stack of numeric or pair expressions.
-Various mathematical operations may be performed on the stack values.
-
-The expression stack is connected to a system of linear equations (LEQ).
-If an equation is constructed from 2 polynomials, it is put into the LEQ.
-The LEQ operates on generic identifiers and knows nothing of the
-'real life' symbols we use in the parser. The expression stack is
-a bridge between both worlds: It holds a table (VariableResolver) to
-map LEQ-internal variables to real-life symbols. The variable resolver
-will receive a message from the LEQ whenever an equation gets solved,
-i.e. variables become known.
-
-The connection between symbols and LEQ-variables is by symbol-ID:
-symbol "a" with ID=7 will be x.7 in LEQ.
-*/
+// ExprStack implements a stack of numeric or pair expressions.
+// Various mathematical operations may be performed on the stack values.
+//
+// The expression stack is connected to a system of linear equations (LEQ).
+// If an equation is constructed from 2 polynomials, it is put into the LEQ.
+// The LEQ operates on generic identifiers and knows nothing of the
+// 'real life' symbols we use in the parser. The expression stack is
+// a bridge between both worlds: It holds a table (VariableResolver) to
+// map LEQ-internal variables to real-life symbols. The variable resolver
+// will receive a message from the LEQ whenever an equation gets solved,
+// i.e. variables become known.
+//
+// The connection between symbols and LEQ-variables is by symbol-ID:
+// symbol "a" with ID=7 will be x.7 in LEQ.
+//
 type ExprStack struct {
 	stack    *linkedliststack.Stack // a stack of expressions
 	leq      *polyn.LinEqSolver     // we need a system of linear equations
 	resolver map[int]*runtime.Tag   // used to resolve variable names from IDs
 }
 
-// Create a new expression stack. It is fully initialized and empty.
+// NewExprStack creates
+// a new expression stack. It is fully initialized and empty.
 func NewExprStack() *ExprStack {
 	est := &ExprStack{
 		stack:    linkedliststack.New(), // stack of interface{}
@@ -254,27 +256,27 @@ func NewExprStack() *ExprStack {
 	return est
 }
 
-/*
-Give notice of a new variable used in expressions / polynomials.
-This will put the variable's symbol into the variable resolver's table.
-
-Example: symbol "a"|ID=7  ⟹  resolver table[7] = "a"
-
-If a variable ID is not known by the resolver, it is assumed to be
-a "capsule", which is MetaFont's notation for a variable that has
-fallen out of scope.
-*/
+// AnnounceVariable gives the LEQ solver notice
+// of a new variable used in expressions / polynomials.
+// This will put the variable's symbol into the variable resolver's table.
+//
+// Example: symbol "a"|ID=7  ⟹  resolver table[7] = "a"
+//
+// If a variable ID is not known by the resolver, it is assumed to be
+// a "capsule", which is MetaFont's notation for a variable that has
+// fallen out of scope.
+//
 func (es *ExprStack) AnnounceVariable(v *runtime.Tag) {
 	T().P("var", v.Name).Debugf("announcing id=%d", v.ID)
 	es.resolver[int(v.ID)] = v
 }
 
-/*
-Return the name of a variable, given its ID. Will return the string
-"?nnnn" for capsules.
-
-Interface VariableResolver.
-*/
+// GetVariableName returns
+// the name of a variable, given its ID. Will return the string
+// "?nnnn" for capsules.
+//
+// Interface VariableResolver.
+//
 func (es *ExprStack) GetVariableName(id int) string {
 	v, ok := es.resolver[id]
 	if !ok {
@@ -283,24 +285,24 @@ func (es *ExprStack) GetVariableName(id int) string {
 	return v.Name
 }
 
-/*
-Is a variable (index) a capsule, i.e., has it gone out of scope?
-The terminus stems from MetaFont (with "whatever" being a prominent
-example for a capsule).
-
-Interface VariableResolver.
-*/
+// IsCapsule is a predicate:
+// Is a variable (index) a capsule, i.e., has it gone out of scope?
+// The terminus stems from MetaFont (with "whatever" being a prominent
+// example for a capsule).
+//
+// Interface VariableResolver.
+//
 func (es *ExprStack) IsCapsule(id int) bool {
 	_, found := es.resolver[id]
 	return !found
 }
 
-/*
-Set the value of a variable. If the LEQ solves a variable and it becomes
-known, the LEQ will send us this message.
-
-Interface VariableResolver.
-*/
+// SetVariableSolved is a notification receiver.
+// Set the value of a variable. If the LEQ solves a variable and it becomes
+// known, the LEQ will send us this message.
+//
+// Interface VariableResolver.
+//
 func (es *ExprStack) SetVariableSolved(id int, val float64) {
 	v, ok := es.resolver[id]
 	if ok { // yes, we know about this variable
@@ -320,7 +322,8 @@ func (es *ExprStack) EncapsuleVariable(id int32) {
 	delete(es.resolver, int(id))
 }
 
-// Stack functionality. Will return an invalid expression if stack is empty.
+// Top is part of
+// stack functionality. Will return an invalid expression if stack is empty.
 func (es *ExprStack) Top() *ExprNode {
 	tos, ok := es.stack.Peek()
 	if !ok {
@@ -329,13 +332,15 @@ func (es *ExprStack) Top() *ExprNode {
 	return tos.(*ExprNode)
 }
 
-// Stack functionality.
+// Pop is part of
+// stack functionality.
 func (es *ExprStack) Pop() (*ExprNode, bool) {
 	tos, ok := es.stack.Pop()
 	return tos.(*ExprNode), ok
 }
 
-// Convenience method: return TOS as a numeric constant.
+// PopAsNumeric is a convenience
+// method: return TOS as a numeric constant.
 func (es *ExprStack) PopAsNumeric() (float64, bool) {
 	tos, ok := es.stack.Pop()
 	if ok && tos.(*ExprNode).IsValid() {
@@ -347,18 +352,19 @@ func (es *ExprStack) PopAsNumeric() (float64, bool) {
 	return 0, false
 }
 
-// Convenience method: return TOS as a pair constant.
+// PopAsPair is a convenience
+// method: return TOS as a pair constant.
 // If TOS is not a known pair, returns (0,0) and false.
 func (es *ExprStack) PopAsPair() (arithm.Pair, bool) {
 	tos, ok := es.Pop()
 	if !ok || tos == nil {
 		return arithm.Origin, false
-	} else {
-		return tos.GetConstPair()
 	}
+	return tos.GetConstPair()
 }
 
-// Convenience method: return TOS as interface{}
+// PopAsOther is a
+// convenience method: return TOS as interface{}
 func (es *ExprStack) PopAsOther() (interface{}, bool) {
 	tos, ok := es.Pop()
 	if ok {
@@ -367,7 +373,8 @@ func (es *ExprStack) PopAsOther() (interface{}, bool) {
 	return nil, false
 }
 
-// Stack functionality.
+// Push is part of
+// stack functionality.
 func (es *ExprStack) Push(e *ExprNode) *ExprStack {
 	es.stack.Push(e)
 	return es
@@ -376,7 +383,8 @@ func (es *ExprStack) Push(e *ExprNode) *ExprStack {
 func (es *ExprStack) announce(e *ExprNode) {
 }
 
-// Push a numeric constant onto the stack. It will be wrapped into a
+// PushConstant pushes
+// a numeric constant onto the stack. It will be wrapped into a
 // polynomial p = c. For pair constants use PushPairConstant(c).
 func (es *ExprStack) PushConstant(c float64) *ExprStack {
 	constant := polyn.NewConstantPolynomial(c)
@@ -385,7 +393,8 @@ func (es *ExprStack) PushConstant(c float64) *ExprStack {
 	return es.Push(NewNumericExpression(constant))
 }
 
-// Push a pair constant onto the stack. It will be wrapped into a
+// PushPairConstant pushes
+// a pair constant onto the stack. It will be wrapped into a
 // polynomial p = c. For numeric constants use PushConstant(c).
 func (es *ExprStack) PushPairConstant(pc arithm.Pair) *ExprStack {
 	XPart := polyn.NewConstantPolynomial(pc.X())
@@ -421,16 +430,15 @@ func (es *ExprStack) PushVariable(v *runtime.Tag, w *runtime.Tag) *ExprStack {
 		symname := fmt.Sprintf("(%s,%s)", v.Name, w.Name)
 		T().P("var", symname).Debugf("pushing %s", e.String())
 		return es.Push(e)
-	} else {
-		T().P("var", v.Name).Debugf("pushing p = %s", p.String())
-		return es.Push(NewNumericExpression(p))
 	}
+	T().P("var", v.Name).Debugf("pushing p = %s", p.String())
+	return es.Push(NewNumericExpression(p))
 }
 
-/*
-Push a pair variable onto the stack. The ID of the variable must be > 0 !
-It will be wrapped into two polynomials p = 0 + 1 * xpart/ypart(v).
-*/
+// PushPairVariable pushes
+// a pair variable onto the stack. The ID of the variable must be > 0 !
+// It will be wrapped into two polynomials p = 0 + 1 * xpart/ypart(v).
+//
 func (es *ExprStack) PushPairVariable(XPart *runtime.Tag, xconst float64, YPart *runtime.Tag,
 	yconst float64) *ExprStack {
 	//
@@ -450,11 +458,11 @@ func (es *ExprStack) PushPairVariable(XPart *runtime.Tag, xconst float64, YPart 
 	return es.Push(e)
 }
 
-/*
-If an expression is a simple variable reference, return the symbol /
-variable reference. The variable must have been previously announced
-(see PushVariable(v)).
-*/
+// GetVariable converts a variable to the underlying Tag.
+// If an expression is a simple variable reference, return the symbol /
+// variable reference. The variable must have been previously announced
+// (see PushVariable(v)).
+//
 func (es *ExprStack) GetVariable(e *ExprNode) *runtime.Tag {
 	if e.IsValid() {
 		v, ok := e.XPolyn.IsVariable()
@@ -465,17 +473,20 @@ func (es *ExprStack) GetVariable(e *ExprNode) *runtime.Tag {
 	return nil
 }
 
-// Stack functionality.
+// IsEmpty is part of
+// stack functionality.
 func (es *ExprStack) IsEmpty() bool {
 	return es.stack.Empty()
 }
 
-// Stack functionality.
+// Size is part of
+// stack functionality.
 func (es *ExprStack) Size() int {
 	return es.stack.Size()
 }
 
-// Internal helper: dump expression stack. This is printed to the trace
+// Dump is an
+// internal helper: dump expression stack. This is printed to the trace
 // with level=DEBUG.
 func (es *ExprStack) Dump() {
 	T().P("size", es.Size()).Debugf("Expression Stack, TOS first:")
@@ -486,32 +497,30 @@ func (es *ExprStack) Dump() {
 	}
 }
 
-// Print a summary of LEQ and stack contents.
+// Summary prints
+// a summary of LEQ and stack contents.
 func (es *ExprStack) Summary() {
 	es.leq.Dump(es)
 	es.Dump()
 }
 
-/* Check: is this a valid expression? Will reject un-initialized expressions.
- */
+// Check: is this a valid expression? Will reject un-initialized expressions.
 func (es *ExprStack) isValid(e *ExprNode) bool {
 	return e.XPolyn.Terms != nil
 }
 
-// Pretty print an expression.
+// TraceString pretty-prints an expression.
 func (es *ExprStack) TraceString(e *ExprNode) string {
 	if e.IsValid() {
 		return e.XPolyn.TraceString(es)
-	} else {
-		return "<empty>"
 	}
+	return "<empty>"
 }
 
-/*
-Check the operands on the stack for an arithmetic operation.
-Currently will panic if operands are invalid or not enough operands (n) on
-stack.
-*/
+// CheckOperands checks
+// the operands on the stack for an arithmetic operation.
+// Currently will panic if operands are invalid or not enough operands (n) on
+// stack.
 func (es *ExprStack) CheckOperands(n int, op string) error {
 	if n <= 0 {
 		return fmt.Errorf("Internal error: Illegal count for stack operands")
@@ -530,7 +539,8 @@ var _ polyn.VariableResolver = &ExprStack{}
 
 // === Arithmetic Operations =================================================
 
-// Length of a pair (i.e., distance from origin). Argument must be a known pair.
+// LengthTOS returns the
+// length of a pair (i.e., distance from origin). Argument must be a known pair.
 func (es *ExprStack) LengthTOS() error {
 	if err := es.CheckOperands(1, "get length of"); err != nil {
 		return err
@@ -541,17 +551,17 @@ func (es *ExprStack) LengthTOS() error {
 	if !e.IsPair || !isconstx || !isconsty {
 		T().P("op", "length").Errorf("argument must be known pair")
 		return fmt.Errorf("not implemented: length(<unknown>)")
-	} else {
-		T().P("op", "length").Debugf("length of (%s,%s)", cx, cy)
-		x := cx
-		y := cy
-		l := math.Sqrt(x*x + y*y)
-		es.PushConstant(l)
 	}
+	T().P("op", "length").Debugf("length of (%s,%s)", cx, cy)
+	x := cx
+	y := cy
+	l := math.Sqrt(x*x + y*y)
+	es.PushConstant(l)
 	return nil
 }
 
-// Add TOS and 2ndOS. Allowed for known and unknown terms.
+// AddTOS2OS adds
+// TOS and 2ndOS. Allowed for known and unknown terms.
 func (es *ExprStack) AddTOS2OS() error {
 	var e, e1, e2 *ExprNode
 	if err := es.CheckOperands(2, "add"); err != nil {
@@ -581,7 +591,8 @@ func (es *ExprStack) AddTOS2OS() error {
 	return nil
 }
 
-// Subtract TOS from 2ndOS. Allowed for known and unknown terms.
+// SubtractTOS2OS substracts
+// TOS from 2ndOS. Allowed for known and unknown terms.
 func (es *ExprStack) SubtractTOS2OS() error {
 	var e, e1, e2 *ExprNode
 	if err := es.CheckOperands(2, "subtract"); err != nil {
@@ -611,7 +622,8 @@ func (es *ExprStack) SubtractTOS2OS() error {
 	return nil
 }
 
-// Multiply TOS and 2ndOS. One multiplicant must be a known numeric constant.
+// MultiplyTOS2OS multiplies
+// TOS and 2ndOS. One multiplicant must be a known numeric constant.
 func (es *ExprStack) MultiplyTOS2OS() error {
 	var e, e1, e2 *ExprNode
 	if err := es.CheckOperands(2, "multiply"); err != nil {
@@ -625,7 +637,7 @@ func (es *ExprStack) MultiplyTOS2OS() error {
 	if e1.IsPair {
 		if e2.IsPair {
 			T().Errorf("one multiplicant must be a known numeric")
-			fmt.Errorf("not implemented: <pair> * <pair>")
+			T().Errorf("not implemented: <pair> * <pair>")
 		} else {
 			n := e2.XPolyn
 			nn := n.CopyPolynomial()
@@ -642,7 +654,8 @@ func (es *ExprStack) MultiplyTOS2OS() error {
 	return nil
 }
 
-// Divide 2ndOS by TOS. Divisor must be numeric non-0 constant.
+// DivideTOS2OS divides
+// 2ndOS by TOS. Divisor must be numeric non-0 constant.
 func (es *ExprStack) DivideTOS2OS() error {
 	var e, e1, e2 *ExprNode
 	if err := es.CheckOperands(2, "divide"); err != nil {
@@ -669,8 +682,9 @@ func (es *ExprStack) DivideTOS2OS() error {
 	return nil
 }
 
-//Numeric interpolation operation. Either n must be known or a and b.
-//Calulated as:
+// Interpolate is a
+// numeric interpolation operation. Either n must be known or a and b.
+// Calulated as:
 //
 //   n[a,b] ⟹ a - na + nb.
 //
@@ -696,7 +710,8 @@ func (es *ExprStack) Interpolate() (err error) {
 	return
 }
 
-// Pair interpolation operation. Either n must be known or z1 and z2.
+// InterpolatePair is a
+// pair interpolation operation. Either n must be known or z1 and z2.
 //
 //    n[z1,z2] ⟹ z1 - n*z1 + n*z2.
 //
@@ -716,7 +731,8 @@ func (es *ExprStack) InterpolatePair(n *ExprNode, z1 *ExprNode, z2 *ExprNode) er
 	return nil
 }
 
-// Rotate a pair around origin for TOS degrees, counterclockwise.
+// Rotate2OSbyTOS rotates
+// a pair around origin for TOS degrees, counterclockwise.
 // TOS must be a known numeric constant.
 func (es *ExprStack) Rotate2OSbyTOS() error {
 	if err := es.CheckOperands(2, "rotate"); err != nil {
@@ -748,7 +764,8 @@ func (es *ExprStack) Rotate2OSbyTOS() error {
 	return nil
 }
 
-// Create an equation of the polynomials of TOS and 2ndOS.
+// EquateTOS2OS creates
+// an equation of the polynomials of TOS and 2ndOS.
 // Introduces the equation to the solver's linear equation system.
 //
 // If the polynomials are of type pair polynomial, then there will be 2
