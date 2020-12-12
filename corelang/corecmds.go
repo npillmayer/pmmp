@@ -555,5 +555,5 @@ func getCtxText(ctx interface{}) string {
 }
 
 func exprStack(rt *runtime.Runtime) *ExprStack {
-	return rt.UData.(*ExprStack)
+	return rt.UData.(*ExprStack) // TODO remove UDATA
 }

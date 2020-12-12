@@ -411,27 +411,11 @@ func newPairVarValues(v *VarRef) *pairVarValues {
 // CreatePairTypeVarRef creates a pair variable reference. Low level method.
 func createPairTypeVarRef(v *VarRef, decl *Suffix, value pmmp.Value, indices []float64) *VarRef {
 	T().Debugf("extending pair var for %v", decl.FullName())
-	// v := &VarRef{
-	// 	decl:       decl,
-	// 	subscripts: indices,
-	// 	Value:      value,
-	// }
-	// v.Tag.Name = decl.name
 	v.Typ = int8(pmmp.PairType)
-	//
 	T().Debugf("creating pair values proxy")
 	pv := newPairVarValues(v)
 	v.Value = pv
-	//
 	v.Set(value)
-	// if pair, ok = value.(arithm.Pair); ok {
-	// 	T().Debugf("setting value of pair var to %v", pair)
-	// 	xpart.Value = pair.X()
-	// 	ypart.Value = pair.Y()
-	// } else {
-	// 	xpart.Value = math.NaN()
-	// 	ypart.Value = math.NaN()
-	// }
 	return v
 }
 
