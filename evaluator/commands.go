@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/npillmayer/arithm/polyn"
 	"github.com/npillmayer/gorgo/runtime"
 	"github.com/npillmayer/pmmp"
 	"github.com/npillmayer/pmmp/variables"
@@ -18,9 +19,9 @@ var whateverCounter int64
 
 // Whatever creates an anonymous variable. In MetaFont this is a macro, but
 // it is a frequent use case, so we put it in the core.
-func Whatever(rt *runtime.Runtime) *variables.VarRef {
+func (ev *Evaluator) Whatever() *variables.VarRef {
 	var vref *variables.VarRef
-	sym, _ := rt.ScopeTree.Globals().ResolveTag("_whtvr")
+	sym, _ := ev.ScopeTree.Globals().ResolveTag("_whtvr")
 	if sym == nil {
 		T().Errorf("'whatever'-variable not correctly initialized")
 	} else {
@@ -30,6 +31,35 @@ func Whatever(rt *runtime.Runtime) *variables.VarRef {
 		vref = variables.CreateVarRef(WhateverDeclaration.AsSuffix(), nil, inx)
 	}
 	return vref
+}
+
+// Equation adds a new equation to the runtime evaluator. Given two values
+// which represent left and right side polynomials of an equation, it creates an
+// equations and puts it into the LEQ solver. Values/polynomials may be of
+// numeric or pair type, but must have matching types.
+func (ev *Evaluator) Equation(left, right pmmp.Value) (err error) {
+	var zero pmmp.Value
+	if zero, err = right.Self().Minus(left); err == nil {
+		if zero.IsKnown() {
+			T().Debugf("skipping equation for 2 known values")
+			return
+		}
+		if zero.Self().IsPair() {
+			p := zero.Self().AsPair()
+			var eqs = []polyn.Polynomial{
+				p.XNumeric().Polynomial(),
+				p.YNumeric().Polynomial(),
+			}
+			ev.leq.AddEqs(eqs)
+		} else {
+			ev.leq.AddEq(zero.Self().AsNumeric().Polynomial())
+		}
+		return
+	}
+	if err != nil {
+		T().Errorf("cannot create equation: %v", err)
+	}
+	return
 }
 
 /*
@@ -46,22 +76,22 @@ Assign is a variable assignment.
 (4) If type is numeric or pair: Create equation on expression stack,
 else assign a path value to a path variable.
 */
-func (ev *Evaluator) Assign(lvalue *variables.VarRef, e pmmp.Value) {
-	varname := lvalue.Name()
-	oldserial := lvalue.ID
+func (ev *Evaluator) Assign(lvalue *variables.VarRef, e pmmp.Value) error {
+	varname := lvalue.FullName()
+	oldserial := lvalue.ID()
 	T().P("var", varname).Debugf("assignment of lvalue #%d", oldserial)
-	ev.EncapsuleVariable(lvalue.ID())
+	ev.EncapsuleVariable(oldserial)
 	vref, mf := ev.FindVariableReferenceInMemory(lvalue, false)
 	vref.Set(nil) // now lvalue is unset / unsolved
 	T().P("var", varname).Debugf("unset in %v", mf)
 	vref.Reincarnate()
-	T().P("var", vref.Name()).Debugf("new lvalue incarnation #%d", vref.ID)
-	if vref.Type() == pmmp.PathType {
+	T().P("var", varname).Debugf("new lvalue incarnation #%d", vref.ID)
+	if vref.Type() != pmmp.NumericType && vref.Type() != pmmp.PathType {
 		//vref.Set(e.Other) // TODO Value of type path
-	} else { // create linear equation
-		// TODO
-		//exprStack(rt).EquateTOS2OS()  // construct equation
+		panic(fmt.Sprintf("assignment of type %v not yet implemented", vref.Type()))
 	}
+	// create linear equation
+	return ev.Equation(lvalue.Value, e)
 }
 
 // Save a tag within a group. The tag will be restored at the end of the
