@@ -3,6 +3,7 @@ module github.com/npillmayer/pmmp
 go 1.14
 
 replace github.com/npillmayer/gorgo => /Users/npi/prg/go/gorgo
+replace github.com/npillmayer/arithm => /Users/npi/prg/go/arithm
 
 require (
 	github.com/antlr/antlr4 v0.0.0-20201206235148-c87e55b61113

@@ -48,33 +48,32 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------
-
- * This module implements a stack of expressions. It is used for
- * expression evaluation during a parser walk of an expression AST.
- * Expressions can be of type numeric or of type pair.
- *
- * Complexity arises from the fact that we handle not only known
- * quantities, but unknown ones, too. Unknown variables will be handled
- * as terms in linear polynomials. Numeric expressions on the stack are always
- * represented by linear polynomials, containing solved and unsolved variables.
- *
- * The expression stack is connected to a system of linear equations (LEQ).
- * If an equation is constructed from 2 polynomials, it is put into the LEQ.
- * The LEQ operates on generic identifiers and knows nothing of the
- * 'real life' symbols we use in the parser. The expression stack is
- * a bridge between both worlds: It holds a table (VariableResolver) to
- * map LEQ-internal variables to real-life symbols. The variable resolver
- * will receive a message from the LEQ whenever an equation gets solved,
- * i.e. variables become known.
- *
- * Other types of expression are not considered native expressions for the
- * stack, but it is nevertheless possible to put them on the stack. They
- * are stored as interface{} and there are no supporting methods or
- * arithmetic operations defined for them.
-
 */
+// This module implements a stack of expressions. It is used for
+// expression evaluation during a parser walk of an expression AST.
+// Expressions can be of type numeric or of type pair.
+//
+// Complexity arises from the fact that we handle not only known
+// quantities, but unknown ones, too. Unknown variables will be handled
+// as terms in linear polynomials. Numeric expressions on the stack are always
+// represented by linear polynomials, containing solved and unsolved variables.
+//
+// The expression stack is connected to a system of linear equations (LEQ).
+// If an equation is constructed from 2 polynomials, it is put into the LEQ.
+// The LEQ operates on generic identifiers and knows nothing of the
+// 'real life' symbols we use in the parser. The expression stack is
+// a bridge between both worlds: It holds a table (VariableResolver) to
+// map LEQ-internal variables to real-life symbols. The variable resolver
+// will receive a message from the LEQ whenever an equation gets solved,
+// i.e. variables become known.
+//
+// Other types of expression are not considered native expressions for the
+// stack, but it is nevertheless possible to put them on the stack. They
+// are stored as interface{} and there are no supporting methods or
+// arithmetic operations defined for them.
 
 // Some symbols are lvalues, i.e. can be assigned a value
+//
 // type Assignable interface {
 // 	GetValue() interface{}
 // 	SetValue(interface{})
@@ -92,7 +91,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Sometimes it is convenient to push a different type of expression onto
 // the stack (or to complement a numeric expression with additional info), so
-// expressions are allowed to point to 'other' data (GetOther()).
+// expressions are allowed to point to 'other' data.
 //
 type ExprNode struct {
 	XPolyn polyn.Polynomial
@@ -380,8 +379,8 @@ func (es *ExprStack) Push(e *ExprNode) *ExprStack {
 	return es
 }
 
-func (es *ExprStack) announce(e *ExprNode) {
-}
+// func (es *ExprStack) announce(e *ExprNode) {
+// }
 
 // PushConstant pushes
 // a numeric constant onto the stack. It will be wrapped into a
@@ -412,12 +411,11 @@ func (es *ExprStack) PushOtherConstant(o interface{}) *ExprStack {
 	return es.Push(e)
 }
 
-/*
-PushVariable pushes
-a variable onto the stack. The ID of the variable must be > 0 !
-It will be wrapped into a polynomial p = 0 + 1 * v.
-If the variable is of type pair we will push a pair expression.
-*/
+// PushVariable pushes
+// a variable onto the stack. The ID of the variable must be > 0 !
+// It will be wrapped into a polynomial p = 0 + 1 * v.
+// If the variable is of type pair we will push a pair expression.
+//
 func (es *ExprStack) PushVariable(v *runtime.Tag, w *runtime.Tag) *ExprStack {
 	es.AnnounceVariable(v)
 	p := polyn.NewConstantPolynomial(0)

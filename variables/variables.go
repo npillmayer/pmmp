@@ -3,11 +3,11 @@ package variables
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"strings"
+	"sync/atomic"
 
-	"github.com/npillmayer/arithm"
 	"github.com/npillmayer/gorgo/runtime"
+	"github.com/npillmayer/pmmp"
 	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing"
 )
@@ -18,22 +18,6 @@ func T() tracing.Trace {
 }
 
 // === Variable Type Declarations ============================================
-
-// VariableType obviously represents the type of a variable.
-type VariableType int8
-
-// Predefined variable types
-const (
-	Undefined VariableType = iota
-	NumericType
-	PairType
-	PathType
-	ColorType
-	PenType
-	VardefType
-	SubscriptType
-	SuffixType
-)
 
 /*
 VarDecl represents a variable declaration.
@@ -63,13 +47,13 @@ Result:
 
 */
 type VarDecl struct { // this is a tag, an array-subtype, or a suffix
+	runtime.Tag // declared tag
 	Suffix
-	tag *runtime.Tag // declared tag
 }
 
 // Suffix is a variable suffix (subscript or tag)
 type Suffix struct {
-	name        string
+	suffixName  string
 	isSubscript bool
 	Parent      *Suffix
 	Sibling     *Suffix
@@ -78,24 +62,15 @@ type Suffix struct {
 }
 
 // NewVarDecl creates and initialize a new variable type declaration.
-func NewVarDecl(nm string, tp VariableType) *VarDecl {
+func NewVarDecl(name string, typ pmmp.ValueType) *VarDecl {
 	decl := &VarDecl{}
-	decl.name = nm
-	decl.tag = runtime.NewTag(nm).WithType(int8(tp))
-	decl.tag.UData = decl
+	decl.suffixName = name
+	decl.Tag = *runtime.NewTag(name)
+	decl.Tag.Typ = int8(typ)
+	decl.Tag.UData = decl
 	decl.baseDecl = decl // this pointer should never be nil
 	T().P("decl", decl.FullName()).Debugf("atomic variable type declaration created")
 	return decl
-}
-
-// Tag returns the variable declaration as a tag (for symbol tables).
-func (d *VarDecl) Tag() *runtime.Tag {
-	return d.tag
-}
-
-// DeclFromTag returns the declaration represented by a tag.
-func DeclFromTag(tag *runtime.Tag) *VarDecl {
-	return tag.UData.(*VarDecl)
 }
 
 // AsSuffix returns a variable declaration as a Suffix. Every variable
@@ -104,8 +79,18 @@ func (d *VarDecl) AsSuffix() *Suffix {
 	return &d.Suffix
 }
 
+// AsTag returns the variable declaration as a tag (for symbol tables).
+func (d *VarDecl) AsTag() *runtime.Tag {
+	return &d.Tag
+}
+
+// DeclFromTag returns the declaration represented by a tag.
+func DeclFromTag(tag *runtime.Tag) *VarDecl {
+	return tag.UData.(*VarDecl)
+}
+
 func (d *VarDecl) String() string {
-	return fmt.Sprintf("<decl %s/%s>", d.FullName(), d.GetBaseType().String())
+	return fmt.Sprintf("<decl %s/%s>", d.FullName(), d.Type().String())
 }
 
 // IsBaseDecl is a prediacte: is this suffix the base tag?
@@ -114,8 +99,8 @@ func (s *Suffix) IsBaseDecl() bool {
 }
 
 // Type returns the variable's type.
-func (s *Suffix) Type() VariableType {
-	return VariableType(s.baseDecl.tag.Type())
+func (s *Suffix) Type() pmmp.ValueType {
+	return pmmp.ValueType(s.baseDecl.Tag.Typ)
 }
 
 // BaseDecl returns the base type declaration for a tag.
@@ -123,14 +108,15 @@ func (s *Suffix) BaseDecl() *VarDecl {
 	return s.baseDecl
 }
 
-// Name gets the isolated name of declaration partial (tag, array or suffix).
-func (s *Suffix) Name() string {
+// SuffixName gets the isolated name of declaration partial
+// (tag, array or suffix).
+func (s *Suffix) SuffixName() string {
 	if s.isSubscript {
 		return "[]"
 	} else if s.Parent != nil {
-		return "." + s.name
+		return "." + s.suffixName
 	}
-	return s.name
+	return s.BaseDecl().Name()
 }
 
 // FullName gets
@@ -140,7 +126,7 @@ func (s *Suffix) Name() string {
 //
 func (s *Suffix) FullName() string {
 	if s.Parent == nil {
-		return s.baseDecl.tag.Name
+		return s.baseDecl.Tag.Name()
 	} // we are in a declaration for a complex type
 	var str bytes.Buffer
 	str.WriteString(s.Parent.FullName()) // recursive
@@ -148,15 +134,15 @@ func (s *Suffix) FullName() string {
 		str.WriteString("[]")
 	} else {
 		str.WriteString(".") // MetaFont suppresses this if following a subscript partial
-		str.WriteString(s.name)
+		str.WriteString(s.suffixName)
 	}
 	return str.String()
 }
 
 // GetBaseType gets the type of the base tag.
-func (s *Suffix) GetBaseType() VariableType {
-	return s.baseDecl.Type()
-}
+// func (s *Suffix) GetBaseType() pmmp.ValueType {
+// 	return s.baseDecl.Type()
+// }
 
 // CreateSuffix is a function to create and initialize a suffix to
 // a type declaration.
@@ -170,16 +156,16 @@ func (s *Suffix) GetBaseType() VariableType {
 //
 // Will panic if SubscriptType, but no parent given.
 //
-func CreateSuffix(nm string, tp VariableType, parent *Suffix) *Suffix {
-	if tp != SubscriptType && tp != SuffixType {
+func CreateSuffix(name string, typ pmmp.ValueType, parent *Suffix) *Suffix {
+	if typ != pmmp.SubscriptType && typ != pmmp.SuffixType {
 		panic("Suffix must either be of type SuffixType or SubscriptType")
 	}
 	if parent != nil { // check if already exists as child of parent
 		if parent.Suffixes != nil {
 			ch := parent.Suffixes
 			for ch != nil { // check all direct suffixes
-				if (tp == SuffixType && ch.name == nm) ||
-					(ch.isSubscript && tp == SubscriptType) {
+				if (typ == pmmp.SuffixType && ch.suffixName == name) ||
+					(ch.isSubscript && typ == pmmp.SubscriptType) {
 					T().P("decl", ch.FullName()).Debugf("variable type already declared")
 					return ch // we're done
 				}
@@ -188,14 +174,14 @@ func CreateSuffix(nm string, tp VariableType, parent *Suffix) *Suffix {
 		}
 	}
 	s := &Suffix{ // not found => create a new one
-		name:        nm,
-		isSubscript: tp == SubscriptType,
+		suffixName:  name,
+		isSubscript: typ == pmmp.SubscriptType,
 	}
 	if parent == nil { // then wrap into a var decl
 		if s.isSubscript { // can't have a subscript as a top-level var decl
 			panic("Trying to have standalone subscript")
 		}
-		d := NewVarDecl(nm, NumericType) // numeric is default in MetaFont
+		d := NewVarDecl(name, pmmp.NumericType) // numeric is default in MetaPost
 		d.Suffix = *s
 		s.baseDecl = d
 		return d.AsSuffix()
@@ -234,7 +220,7 @@ func (s *Suffix) ShowDeclarations(b *bytes.Buffer) *bytes.Buffer {
 	if b == nil {
 		b = new(bytes.Buffer)
 	}
-	b.WriteString(fmt.Sprintf("%s : %s\n", s.FullName(), s.baseDecl.GetBaseType().String()))
+	b.WriteString(fmt.Sprintf("%s : %s\n", s.FullName(), s.baseDecl.Type().String()))
 	ch := s.Suffixes
 	for ; ch != nil; ch = ch.Sibling {
 		b = ch.ShowDeclarations(b)
@@ -266,28 +252,29 @@ func (s *Suffix) ShowDeclarations(b *bytes.Buffer) *bytes.Buffer {
 // feature of MetaPost, so we better invest some effort.
 //
 type VarRef struct {
-	runtime.Tag             // store by normalized name
-	cachedName  string      // store full name
-	decl        *Suffix     // type declaration for this variable
-	subscripts  []float64   // list of subscript value, first to last
-	Value       interface{} // if known: has a value (numeric, pair, path, ...)
+	runtime.Tag            // store by normalized name
+	id          int32      // unique ID
+	decl        *Suffix    // type declaration for this variable
+	subscripts  []float64  // list of subscript value, first to last
+	Value       pmmp.Value // value of type numeric, pair, path, …
 }
 
 // CreateVarRef creates a variable reference. Low level method.
-func CreateVarRef(decl *Suffix, value interface{}, indices []float64) *VarRef {
-	if decl.GetBaseType() == PairType {
-		return CreatePairTypeVarRef(decl, value, indices)
-	}
-	T().Debugf("creating %s var for %v", decl.Type().String(), decl)
+func CreateVarRef(decl *Suffix, value pmmp.Value, indices []float64) *VarRef {
+	T().Debugf("creating %s var for %v", decl.Type().String(), decl.FullName())
 	v := &VarRef{
 		decl:       decl,
 		subscripts: indices,
 		Value:      value,
 	}
-	v.ChangeType(int8(decl.Type()))
-	v.ID = newVarSerial() // TODO: check, when this is needed (now: id leak)
+	v.Tag = *runtime.NewTag(v.FullName())
+	v.Typ = int8(decl.Type())
+	v.id = serialCounter.Get()
 	//T().Debugf("created var ref: subscripts = %v", indices)
 	v.Tag.UData = v // link back to var from tag
+	if decl.Type() == pmmp.PairType {
+		return createPairTypeVarRef(v, decl, value, indices)
+	}
 	return v
 }
 
@@ -299,19 +286,31 @@ func (v *VarRef) String() string {
 // This enables us to store the variable in a symbol table.
 // Overrides Name of interface Symbol.
 //
-func (v *VarRef) Name() string {
-	if len(v.cachedName) == 0 {
-		v.cachedName = v.FullName()
-	}
-	return v.cachedName
+// func (v *VarRef) Name() string {
+// if len(v.cachedName) == 0 {
+// 	v.cachedName = v.FullName()
+// }
+// return v.cachedName
+// }
+
+// ID gets the variable's ID.
+func (v *VarRef) ID() int32 {
+	return v.id
+}
+
+// ResetID sets the variables's ID to a new and unused value.
+func (v *VarRef) ResetID() int32 {
+	serial := serialCounter.Get()
+	v.id = serial
+	return v.id
 }
 
 // Type returns the variable's type.
-func (v *VarRef) Type() VariableType {
+func (v *VarRef) Type() pmmp.ValueType {
 	if v.decl != nil {
-		return v.decl.GetBaseType()
+		return v.decl.Type()
 	}
-	return Undefined
+	return pmmp.Undefined
 }
 
 // Declaration returns the variable reference's base tag declaration.
@@ -336,10 +335,10 @@ func VarFromTag(tag *runtime.Tag) *VarRef {
 // as string.
 //
 func (v *VarRef) SuffixesString() string {
-	basetag := v.decl.baseDecl
-	basetagstring := basetag.Name()
+	declbase := v.decl.baseDecl
+	basename := declbase.Name()
 	fullstring := v.FullName()
-	return fullstring[len(basetagstring):]
+	return fullstring[len(basename):]
 }
 
 // --- Variable Type Pair ----------------------------------------------------
@@ -357,46 +356,82 @@ func (v *VarRef) SuffixesString() string {
 // variable index in a system of linear equations LEQ. Otherwise x-part and
 // y-part would not be distinguishable for the LEQ.
 //
-type PairPartRef struct {
+// type PairPartRef struct {
+// 	runtime.Tag
+// 	id      int32      // serial ID
+// 	Pairvar *VarRef    // pair parent
+// 	Value   pmmp.Value // value of type numeric
+// }
+//
+type pairVarValues struct { // has to satisfy interface pmmp.Value
+	values [2]PairPartValue // but is not used as an actual value
+}
+
+func (pv *pairVarValues) Self() pmmp.ValueBase {
+	return pmmp.ValueBase{V: pv}
+}
+
+func (pv *pairVarValues) IsKnown() bool {
+	return pv.values[0].Value.IsKnown() && pv.values[1].Value.IsKnown()
+}
+
+func (pv *pairVarValues) Type() pmmp.ValueType {
+	return pmmp.Undefined
+}
+
+func (pv *pairVarValues) xPart() *PairPartValue {
+	return &pv.values[0]
+}
+
+func (pv *pairVarValues) yPart() *PairPartValue {
+	return &pv.values[1]
+}
+
+// PairPartValue is a pseudo-variable to hold a pair part value of a
+// pair variable. It is wrapped into a variable struct to be able to feed
+// it into the LEQ solver.
+type PairPartValue struct {
 	runtime.Tag
-	ID      int32       // serial ID
-	Pairvar *VarRef     // pair parent
-	Value   interface{} // if known: has a value (numeric)
+	id       int32
+	variable *VarRef
+	Value    pmmp.Value
+}
+
+func newPairVarValues(v *VarRef) *pairVarValues {
+	ppv := &pairVarValues{}
+	ppv.values[0].id = v.id
+	ppv.values[0].variable = v
+	ppv.values[0].Tag.UData = ppv.values[0]
+	ppv.values[1].id = serialCounter.Get()
+	ppv.values[1].variable = v
+	ppv.values[1].Tag.UData = ppv.values[1]
+	return ppv
 }
 
 // CreatePairTypeVarRef creates a pair variable reference. Low level method.
-func CreatePairTypeVarRef(decl *Suffix, value interface{}, indices []float64) *VarRef {
-	T().Debugf("creating pair var for %v", decl.baseDecl.FullName())
-	v := &VarRef{
-		decl:       decl,
-		subscripts: indices,
-		Value:      value,
-	}
-	v.Tag.Name = decl.name
-	v.ChangeType(int8(PairType))
-	v.ID = newVarSerial() // TODO: check, when this is needed (now: id leak)
-	var pair arithm.Pair
-	var ok bool
-	ypart := &PairPartRef{
-		ID:      newVarSerial(),
-		Pairvar: v,
-	}
-	ypart.Tag.UData = ypart
-	xpart := &PairPartRef{
-		ID:      v.ID,
-		Pairvar: v,
-	}
-	xpart.Tag.UData = xpart
-	v.Sibling = &xpart.Tag
-	v.Children = &ypart.Tag
-	if pair, ok = value.(arithm.Pair); ok {
-		T().Debugf("setting value of pair var to %v", pair)
-		xpart.Value = pair.X()
-		ypart.Value = pair.Y()
-	} else {
-		xpart.Value = math.NaN()
-		ypart.Value = math.NaN()
-	}
+func createPairTypeVarRef(v *VarRef, decl *Suffix, value pmmp.Value, indices []float64) *VarRef {
+	T().Debugf("extending pair var for %v", decl.FullName())
+	// v := &VarRef{
+	// 	decl:       decl,
+	// 	subscripts: indices,
+	// 	Value:      value,
+	// }
+	// v.Tag.Name = decl.name
+	v.Typ = int8(pmmp.PairType)
+	//
+	T().Debugf("creating pair values proxy")
+	pv := newPairVarValues(v)
+	v.Value = pv
+	//
+	v.Set(value)
+	// if pair, ok = value.(arithm.Pair); ok {
+	// 	T().Debugf("setting value of pair var to %v", pair)
+	// 	xpart.Value = pair.X()
+	// 	ypart.Value = pair.Y()
+	// } else {
+	// 	xpart.Value = math.NaN()
+	// 	ypart.Value = math.NaN()
+	// }
 	return v
 }
 
@@ -405,54 +440,70 @@ func CreatePairTypeVarRef(decl *Suffix, value interface{}, indices []float64) *V
 // prepending "xpart" or "ypart" respectively. This name is constant and
 // may be used to store the pair part in a symbol table.
 //
-func (ppart *PairPartRef) Name() string {
-	if ppart.Pairvar.ID == ppart.ID {
-		return "xpart " + ppart.Pairvar.Tag.Name
+func (ppv *PairPartValue) Name() string {
+	if ppv.variable.id == ppv.id {
+		return "xpart " + ppv.variable.FullName()
 	}
-	return "ypart " + ppart.Pairvar.Tag.Name
+	return "ypart " + ppv.variable.FullName()
 }
 
 // Type returns the type of a pair part, which is always numeric.
-func (ppart *PairPartRef) Type() VariableType {
-	return NumericType
+func (ppv *PairPartValue) Type() pmmp.ValueType {
+	return pmmp.NumericType
 }
 
 // AsTag returns a pair part as a tag.
-func (ppart *PairPartRef) AsTag() *runtime.Tag {
-	return &ppart.Tag
+func (ppv *PairPartValue) AsTag() *runtime.Tag {
+	return &ppv.Tag
 }
 
-// PPFromTag returns the pair partial from a tag.
-func PPFromTag(tag *runtime.Tag) *PairPartRef {
-	return tag.UData.(*PairPartRef)
+// PPVFromTag returns the pair partial from a tag.
+func PPVFromTag(tag *runtime.Tag) *PairPartValue {
+	return tag.UData.(*PairPartValue)
 }
 
-func (ppart *PairPartRef) String() string {
-	return "<" + ppart.Name() + fmt.Sprintf("=%v>", ppart.Value.(float64))
+func (ppv *PairPartValue) String() string {
+	return "<" + ppv.Name() + fmt.Sprintf("=%v>", ppv.Value)
 }
 
 // IsPair is a predicate: is this variable of type pair?
 func (v *VarRef) IsPair() bool {
-	return v.Type() == PairType
+	return v.Type() == pmmp.PairType
 }
 
 // XPart gets the x-part of a pair variable
-func (v *VarRef) XPart() *PairPartRef {
+func (v *VarRef) XPart() *PairPartValue {
 	if !v.IsPair() {
 		T().P("var", v.Name).Errorf("cannot access x-part of non-pair")
 		return nil
 	}
-	return PPFromTag(v.Sibling)
+	if v.Value == nil {
+		panic("pair variable must never be without values proxy")
+	}
+	values := v.Value.(*pairVarValues)
+	return values.yPart()
 }
 
 // YPart gets the y-part of a pair variable
-func (v *VarRef) YPart() *PairPartRef {
+func (v *VarRef) YPart() *PairPartValue {
 	if !v.IsPair() {
-		T().P("var", v.Name).Errorf("cannot access y-part of non-pair")
+		T().P("var", v.Name).Errorf("cannot access x-part of non-pair")
 		return nil
 	}
-	return PPFromTag(v.Children)
+	if v.Value == nil {
+		panic("pair variable must never be without values proxy")
+	}
+	values := v.Value.(*pairVarValues)
+	return values.yPart()
 }
+
+// func (v *VarRef) YPart() *PairPartRef {
+// 	if !v.IsPair() {
+// 		T().P("var", v.Name).Errorf("cannot access y-part of non-pair")
+// 		return nil
+// 	}
+// 	return PPFromTag(v.Children)
+// }
 
 /*
 Get the x-part value of a pair.
@@ -471,9 +522,9 @@ Interface runtime.Assignable
 // }
 
 // IsKnown returns wether this pair part variable has a known value.
-func (ppart *PairPartRef) IsKnown() bool {
-	return (ppart.Value != nil)
-}
+// func (ppart *PairPartRef) IsKnown() bool {
+// 	return (ppart.Value != nil)
+// }
 
 // FullName gets the full normalized (canonical) name of a variable,  i.e.
 //
@@ -494,7 +545,7 @@ func (v *VarRef) FullName() string {
 			suffixes = append(suffixes, s)
 			subscriptcount--
 		} else {
-			suffixes = append(suffixes, sfx.Name())
+			suffixes = append(suffixes, sfx.suffixName)
 		}
 	}
 	// now reverse the slice of suffixes
@@ -505,25 +556,52 @@ func (v *VarRef) FullName() string {
 	return strings.Join(suffixes, "")
 }
 
-// GetValue satisfies interface runtime.Assignable
-func (v *VarRef) GetValue() interface{} {
-	return v.Value
+// --- Variable ref methods --------------------------------------------------
+
+// HasKnownValue is a predicate: has this variable a known value?
+func (v *VarRef) HasKnownValue() bool {
+	if !v.IsPair() {
+		return v.Value.IsKnown()
+	}
+	return v.Value.(*pairVarValues).IsKnown()
 }
 
-// SetValue satisfies interface runtime.Assignable
-func (v *VarRef) SetValue(val interface{}) {
+// Get gets a variable's value.
+func (v *VarRef) Get() pmmp.Value {
+	if !v.IsPair() {
+		return v.Value
+	}
+	if v.Value == nil {
+		return pmmp.NullPair()
+	}
+	return pmmp.NewPair(v.XPart().Value.Self().AsNumeric(),
+		v.YPart().Value.Self().AsNumeric())
+}
+
+// Set sets a variable's value.
+func (v *VarRef) Set(val pmmp.Value) {
 	T().P("var", v.Name).Debugf("new value: %v", val)
-	v.Value = val
-	if v.IsPair() {
-		var xpart *PairPartRef = PPFromTag(v.Sibling)
-		var ypart *PairPartRef = PPFromTag(v.Children)
-		if val == nil {
-			xpart.Value = nil
-			ypart.Value = nil
-		} else {
-			var pairval arithm.Pair = val.(arithm.Pair)
-			xpart.Value = pairval.X
-			ypart.Value = pairval.Y
+	if !v.IsPair() {
+		switch v.Type() {
+		case pmmp.NumericType:
+			if val == nil {
+				v.Value = pmmp.Numeric{}
+			} else {
+				v.Value = val
+			}
+		}
+		return
+	}
+	T().Debugf("setting pair values")
+	var xpart *PairPartValue = v.XPart()
+	var ypart *PairPartValue = v.YPart()
+	if val == nil {
+		xpart.Value = pmmp.Numeric{}
+		ypart.Value = pmmp.Numeric{}
+	} else {
+		if pairval, ok := val.(pmmp.Pair); ok {
+			xpart.Value = pairval.XNumeric()
+			ypart.Value = pairval.YNumeric()
 		}
 	}
 }
@@ -533,20 +611,20 @@ func (v *VarRef) SetValue(val interface{}) {
 // the parent pair variable to pull the value. If both parts are known and
 // a numeric value is set, the parent pair creates a combined pair value.
 //
-func (v *VarRef) PullValue() {
-	if v.IsPair() {
-		var ppart1, ppart2 *PairPartRef
-		ppart1 = PPFromTag(v.Sibling)
-		ppart2 = PPFromTag(v.Children)
-		if ppart1 != nil && ppart2 != nil {
-			if ppart1.Value != nil && ppart2.Value != nil {
-				v.Value = arithm.P(ppart1.Value.(float64), ppart2.Value.(float64))
-				T().P("var", v.Name).Debugf("pair value = %s",
-					v.Value.(arithm.Pair).String())
-			}
-		}
-	}
-}
+// func (v *VarRef) PullValue() {
+// 	if v.IsPair() {
+// 		var ppart1, ppart2 *PairPartRef
+// 		ppart1 = PPFromTag(v.Sibling)
+// 		ppart2 = PPFromTag(v.Children)
+// 		if ppart1 != nil && ppart2 != nil {
+// 			if ppart1.Value != nil && ppart2.Value != nil {
+// 				v.Value = arithm.P(ppart1.Value.(float64), ppart2.Value.(float64))
+// 				T().P("var", v.Name).Debugf("pair value = %s",
+// 					v.Value.(arithm.Pair).String())
+// 			}
+// 		}
+// 	}
+// }
 
 // ValueString gets
 // the value of a variable as a string, if known. Otherwise return
@@ -558,25 +636,20 @@ func (v *VarRef) ValueString() string {
 		if xpart == nil {
 			xvalue = fmt.Sprintf("xpart %s", v.Name())
 		} else {
-			xvalue = fmt.Sprintf("%g", xpart.(float64))
+			xvalue = fmt.Sprintf("%v", xpart)
 		}
 		ypart := v.YPart().Value
 		if ypart == nil {
 			yvalue = fmt.Sprintf("ypart %s", v.Name())
 		} else {
-			yvalue = fmt.Sprintf("%g", ypart.(float64))
+			yvalue = fmt.Sprintf("%v", ypart)
 		}
 		return fmt.Sprintf("(%s,%s)", xvalue, yvalue)
 	}
-	if v.IsKnown() {
+	if v.HasKnownValue() {
 		return fmt.Sprintf("%v", v)
 	}
 	return "<numeric>"
-}
-
-// IsKnown returns wether this variable has a known value.
-func (v *VarRef) IsKnown() bool {
-	return (v.Value != nil)
 }
 
 // Reincarnate sets a
@@ -589,66 +662,31 @@ func (v *VarRef) IsKnown() bool {
 // Returns the old serial ID.
 //
 func (v *VarRef) Reincarnate() int32 {
-	oldserial := v.ID
-	v.ID = newVarSerial()
+	oldserial := v.id
+	v.id = serialCounter.Get()
 	if v.IsPair() {
-		ypartid := newVarSerial()
-		v.XPart().ID = v.ID
-		v.YPart().ID = ypartid
+		ypartid := serialCounter.Get()
+		v.XPart().id = v.id
+		v.YPart().id = ypartid
 	}
 	return oldserial
 }
 
-var varSerial int32 = 1 // serial number counter for variables, always > 0 !
+// --- Unique ID for tags ----------------------------------------------------
 
-// Get a new unique serial ID for variables.
-func newVarSerial() int32 {
-	serial := varSerial
-	varSerial++
-	T().Debugf("creating new serial ID %d", serial)
-	return serial
+// UniqueID is a counter type.
+type UniqueID struct {
+	counter int32
 }
 
-// --- Helpers ---------------------------------------------------------------
-
-// TypeString returns a type as string.
-func (vt VariableType) String() string {
-	switch vt {
-	case Undefined:
-		return "<undefined>"
-	case NumericType:
-		return "numeric"
-	case PairType:
-		return "pair"
-	case PathType:
-		return "path"
-	case ColorType:
-		return "color"
-	case PenType:
-		return "pen"
-	case VardefType:
-		return "vardef"
-	case SubscriptType:
-		return "[]"
-	case SuffixType:
-		return "<suffix>"
+// Get fetches a new unique id from this counter.
+func (c *UniqueID) Get() int32 {
+	for {
+		val := atomic.LoadInt32(&c.counter)
+		if atomic.CompareAndSwapInt32(&c.counter, val, val+1) {
+			return val
+		}
 	}
-	return fmt.Sprintf("<illegal type: %d>", vt)
 }
 
-// TypeFromString gets a type from a string.
-func TypeFromString(str string) VariableType {
-	switch str {
-	case "numeric":
-		return NumericType
-	case "pair":
-		return PairType
-	case "path":
-		return PathType
-	case "color":
-		return ColorType
-	case "pen":
-		return PenType
-	}
-	return Undefined
-}
+var serialCounter UniqueID // global serial counter
