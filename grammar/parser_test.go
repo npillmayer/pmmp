@@ -27,6 +27,17 @@ func TestParseAtom(t *testing.T) {
 	parse("true", false, t)
 }
 
+func TestParseSecondary(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	parse("1+2", false, t)
+	parse("1+-2", false, t)
+	parse("1+-1/2a", false, t)
+	parse("a-(1,2)", false, t)
+}
+
 func TestParseTertiary(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
@@ -48,7 +59,7 @@ func TestParseList(t *testing.T) {
 	parse("x.r' < -1/4", false, t)
 }
 
-func TestVariableAST(t *testing.T) {
+func TestVariableAST1(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
@@ -102,6 +113,20 @@ func TestExpr2AST(t *testing.T) {
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	compile("x < (1 + 2)", t)
+}
+
+func TestVariableAST2(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("a[7-b]c", t)
+}
+
+func TestPair1(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("b+(1,3a)", t)
 }
 
 // ---------------------------------------------------------------------------

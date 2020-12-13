@@ -12,17 +12,10 @@ import (
 	"github.com/npillmayer/gorgo/lr/sppf"
 	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/gorgo/terex/termr"
-	"github.com/npillmayer/schuko/gtrace"
-	"github.com/npillmayer/schuko/tracing"
 	"github.com/timtadh/lexmachine"
 )
 
 // --- Initialization --------------------------------------------------------
-
-// T traces to the global syntax tracer.
-func T() tracing.Trace {
-	return gtrace.SyntaxTracer
-}
 
 var startOnce sync.Once // monitors one-time creation of grammar and lexer
 
@@ -70,13 +63,11 @@ func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 	b.LHS("secondary").N("primary").End()
 	b.LHS("secondary").N("secondary").T(S("PrimaryOp")).N("primary").End()
 	b.LHS("primary").N("atom").End()
-	b.LHS("primary").T("(", 40).N("numeric_expression").T(",", 44).N("numeric_expression").T(")", 41).End()
+	b.LHS("primary").T("(", 40).N("expression").T(",", 44).N("expression").T(")", 41).End()
 	b.LHS("primary").T(S("UnaryOp")).N("primary").End()
 	b.LHS("primary").T(S("PlusOrMinus")).N("primary").End()
 	b.LHS("atom").N("variable").End()
-	b.LHS("atom").T(S("Signed")).N("variable").End()
 	b.LHS("atom").T(S("Unsigned")).N("variable").End()
-	b.LHS("atom").T(S("Signed")).End()
 	b.LHS("atom").T(S("Unsigned")).End()
 	b.LHS("atom").T(S("NullaryOp")).End()
 	b.LHS("atom").T("(", 40).N("expression").T(")", 41).End()
@@ -152,20 +143,20 @@ func AST(parsetree *sppf.Forest, tokRetr termr.TokenRetriever) (*terex.GCons,
 // not the name of the symbol. If you do not have use for this kind of substitution,
 // simply call Quote(…) for the global environment.
 //
-func QuoteAST(ast terex.Element, env *terex.Environment) (terex.Element, error) {
-	// ast *terex.GCons
-	if env == nil {
-		env = terex.GlobalEnvironment
-	}
-	quEnv := terex.NewEnvironment("quoting", env)
-	quEnv.Defn("list", varOp.call)
-	//quEnv.Defn("quote", quoteOp.call)
-	quEnv.Resolver = symbolPreservingResolver{}
-	q := terex.Eval(ast, quEnv)
-	T().Debugf("QuotAST returns Q = %v", q)
-	q.Dump(tracing.LevelDebug)
-	return q, quEnv.LastError()
-}
+// func QuoteAST(ast terex.Element, env *terex.Environment) (terex.Element, error) {
+// 	// ast *terex.GCons
+// 	if env == nil {
+// 		env = terex.GlobalEnvironment
+// 	}
+// 	quEnv := terex.NewEnvironment("quoting", env)
+// 	quEnv.Defn("list", varOp.call)
+// 	//quEnv.Defn("quote", quoteOp.call)
+// 	quEnv.Resolver = symbolPreservingResolver{}
+// 	q := terex.Eval(ast, quEnv)
+// 	T().Debugf("QuotAST returns Q = %v", q)
+// 	q.Dump(tracing.LevelDebug)
+// 	return q, quEnv.LastError()
+// }
 
 // NewASTBuilder returns a new AST builder for the MetaPost language
 func newASTBuilder(grammar *lr.Grammar) *termr.ASTBuilder {
@@ -179,235 +170,6 @@ func newASTBuilder(grammar *lr.Grammar) *termr.ASTBuilder {
 	ab.AddTermR(tertiaryOp)
 	ab.AddTermR(exprOp)
 	return ab
-}
-
-// === AST Rewriters =========================================================
-
-type mpTermR struct {
-	name    string
-	opname  string
-	rewrite func(*terex.GCons, *terex.Environment) terex.Element
-	call    func(terex.Element, *terex.Environment) terex.Element
-}
-
-var _ terex.Operator = &mpTermR{}
-var _ termr.TermR = &mpTermR{}
-
-func makeASTTermR(name string, opname string) *mpTermR {
-	termr := &mpTermR{
-		name:   name,
-		opname: opname,
-	}
-	return termr
-}
-
-func (trew *mpTermR) String() string {
-	return trew.name
-}
-
-func (trew *mpTermR) Operator() terex.Operator {
-	return trew
-}
-
-func (trew *mpTermR) Rewrite(l *terex.GCons, env *terex.Environment) terex.Element {
-	T().Debugf("%s:trew.Rewrite[%s] called", trew.String(), l.ListString())
-	e := trew.rewrite(l, env)
-	return e
-}
-
-func (trew *mpTermR) Descend(sppf.RuleCtxt) bool {
-	return true
-}
-
-func (trew *mpTermR) Call(e terex.Element, env *terex.Environment) terex.Element {
-	return callFromEnvironment(trew.opname, e, env)
-}
-
-var atomOp *mpTermR      // for atom -> ... productions
-var varOp *mpTermR       // for variable -> ... productions
-var suffixOp *mpTermR    // for suffix -> ... productions
-var subscrOp *mpTermR    // for subscript -> ... productions
-var primaryOp *mpTermR   // for primary -> ... productions
-var secondaryOp *mpTermR // for secondary -> ... productions
-var tertiaryOp *mpTermR  // for tertiary -> ... productions
-var exprOp *mpTermR      // for expression -> ... productions
-
-func initRewriters() {
-	atomOp = makeASTTermR("atom", "atom")
-	atomOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨atom⟩ → ⟨variable⟩ | NUMBER | NullaryOp
-		//     | ( ⟨expression⟩ )
-		T().Infof("atom tree = ")
-		terex.Elem(l).Dump(tracing.LevelInfo)
-		if singleArg(l) { // ⟨variable⟩
-			if keywordArg(l) { // NUMBER | NullaryOp
-				convertTerminalToken(terex.Elem(l.Cdar()), env)
-				return terex.Elem(l.Cdar())
-			}
-			return terex.Elem(l.Cdar())
-		}
-		if tokenArg(l) { // NUMBER ⟨variable⟩ ⇒ (* NUMBER ⟨variable⟩ )
-			// invent an ad-hoc multiplication token
-			op := wrapOpToken(terex.Atomize(makeLMToken("PrimaryOp", "*")))
-			return terex.Elem(terex.List(op, l.Cdar(), l.Cddar()))
-		}
-		return terex.Elem(l.Cddar()) // ( ⟨expression⟩ ) ⇒ ⟨expression⟩
-	}
-	suffixOp = makeASTTermR("suffix", "suffix")
-	suffixOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨suffix⟩ → ε | ⟨suffix⟩ ⟨subscript⟩ | ⟨suffix⟩ TAG
-		T().Debugf("suffix tree = ")
-		terex.Elem(l).Dump(tracing.LevelDebug)
-		if withoutArgs(l) {
-			return terex.Elem(nil) // ⟨suffix⟩ → ε
-		}
-		var suf2 terex.Element
-		tee := terex.Elem(l.Cdr).Sublist()
-		if !tee.IsNil() && tee.First().AsAtom().Type() == terex.OperatorType {
-			suf2 = terex.Elem(l.Cdar()) // ( ⟨subscript⟩ X ) => ( ⟨subscript⟩ X )
-			if singleArg(l) {
-				return suf2
-			}
-		}
-		if singleArg(l) { // ⟨suffix⟩ → ε TAG
-			ll := makeTagSuffixes(terex.Elem(l.Cdar()), env)
-			l = l.Append(ll)
-		} else { // ⟨suffix⟩ → ⟨suffix⟩ TAG
-			ll := makeTagSuffixes(terex.Elem(l.Cddar()), env)
-			l = terex.Cons(suf2.AsAtom(), ll)
-		}
-		return terex.Elem(l)
-	}
-	subscrOp = makeASTTermR("subscript", "subscript")
-	subscrOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		T().Infof("subscript tree = ")
-		terex.Elem(l).Dump(tracing.LevelInfo)
-		if singleArg(l) { // ⟨subscript⟩ → NUMBER
-			T().Errorf("⟨subscript⟩ → NUMBER ")
-			e := terex.Elem(l.Cdar())
-			e = convertTerminalToken(e, env)
-			return terex.Elem(l) // ( ⟨subscript⟩ NUMBER )
-		}
-		T().Errorf("⟨subscript⟩ → [ expr ] ")
-		// ⟨subscript⟩ → '[' ⟨expr⟩ ']'
-		sscr := terex.Cons(l.Car, terex.Cons(l.Cddar(), nil))
-		return terex.Elem(sscr) // ( ⟨subscript⟩ expr )
-	}
-	varOp = makeASTTermR("variable", "variable")
-	varOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨variable⟩ → TAG ⟨suffix⟩
-		T().Debugf("variable tree = ")
-		terex.Elem(l).Dump(tracing.LevelDebug)
-		ll := makeTagSuffixes(terex.Elem(l.Cdar()), env)
-		ll = ll.Append(l.Cddr())
-		l = terex.Cons(l.Car, ll) // prepend #variable operator
-		return terex.Elem(l)
-	}
-	primaryOp = makeASTTermR("primary", "primary")
-	primaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨primary⟩ → ⟨atom⟩ | UnaryOp ⟨primary⟩
-		//     | ⟨scalar multiplication op⟩  ⟨primary⟩
-		//     | ( ⟨numeric expression⟩ , ⟨numeric expression⟩ )
-		T().Infof("primary tree = ")
-		terex.Elem(l).Dump(tracing.LevelInfo)
-		if !singleArg(l) {
-			if l.Length() == 3 {
-				// ⟨primary⟩ → UnaryOp ⟨primary⟩
-				// ⟨primary⟩ → ⟨scalar multiplication op⟩  ⟨primary⟩
-				opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
-				return terex.Elem(terex.Cons(opAtom, l.Cddr())) // UnaryOp ⟨primary⟩
-			}
-			// ⟨primary⟩ → ( ⟨numeric expression⟩ , ⟨numeric expression⟩ )
-			// create a pair
-		}
-		return terex.Elem(l.Cdar()) // ⟨primary⟩ → ⟨atom⟩
-	}
-	secondaryOp = makeASTTermR("secondary", "secondary")
-	secondaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨secondary⟩ → ⟨primary⟩ | ⟨secondary⟩ PrimaryOp ⟨primary⟩
-		T().Infof("secondary tree = ")
-		terex.Elem(l).Dump(tracing.LevelInfo)
-		if singleArg(l) {
-			return terex.Elem(l.Cdar()) // ⟨secondary⟩ → ⟨primary⟩
-		}
-		// ⟨secondary⟩ PrimaryOp ⟨primary⟩ ⇒ ( PrimaryOp ⟨secondary⟩ ⟨primary⟩ )
-		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
-		c := terex.Cons(opAtom, terex.Cons(l.Cdar(), l.Last()))
-		return terex.Elem(c)
-	}
-	tertiaryOp = makeASTTermR("tertiary", "tertiary")
-	tertiaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨tertiary⟩ → ⟨secondary⟩
-		//     | ⟨tertiary⟩  SecondaryOp  ⟨secondary⟩
-		//     | ⟨tertiary⟩  PlusOrMinus  ⟨secondary⟩
-		T().Infof("tertiary tree = ")
-		terex.Elem(l).Dump(tracing.LevelInfo)
-		if singleArg(l) {
-			return terex.Elem(l.Cdar()) // ⟨tertiary⟩ → ⟨secondary⟩
-		}
-		// ⟨tertiary⟩ SecondaryOp ⟨secondary⟩ ⇒ ( SecondaryOp ⟨tertiary⟩ ⟨secondary⟩ )
-		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
-		c := terex.Cons(opAtom, terex.Cons(l.Cdar(), l.Last()))
-		return terex.Elem(c)
-	}
-	exprOp = makeASTTermR("expression", "expr")
-	exprOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨expression⟩ → ⟨subexpression⟩ | ⟨expression⟩  RelationOp  ⟨tertiary⟩
-		T().Infof("expression tree = ")
-		terex.Elem(l).Dump(tracing.LevelInfo)
-		if singleArg(l) {
-			return terex.Elem(l.Cdar()) // ⟨expression⟩ → ⟨subexpression⟩
-		}
-		// ⟨expression⟩ RelationOp ⟨tertiary⟩ ⇒ ( RelationOp ⟨expression⟩ ⟨tertiary⟩ )
-		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
-		c := terex.Cons(opAtom, terex.Cons(l.Cdar(), l.Last()))
-		return terex.Elem(c)
-	}
-}
-
-func withoutArgs(l *terex.GCons) bool {
-	return l == nil || l.Length() <= 1
-}
-
-func singleArg(l *terex.GCons) bool {
-	return l != nil && l.Length() == 2
-}
-
-func tokenArg(l *terex.GCons) bool {
-	return l != nil && l.Length() > 1 && l.Cdar().Type() == terex.TokenType
-}
-
-func keywordArg(l *terex.GCons) bool {
-	if !tokenArg(l) {
-		return false
-	}
-	tokname := l.Cdar().Data.(*terex.Token).Name
-	return len(tokname) > 1 // keyword have at least 2 letters
-}
-
-// TAG is given by the scanner as
-//
-//     tag ( "." tag )*
-//
-// This is done to get fewer prefixes and therefore slightly simpler parse trees.
-// We have to split these up into a list of suffixes.
-// TODO Ignore leading and trailing dots, allow for ', e.g. a.r'
-//
-func makeTagSuffixes(arg terex.Element, env *terex.Environment) *terex.GCons {
-	tok := arg.AsAtom()
-	T().Infof("TAG = %v", tok)         // TAG is []string, e.g. "a.r" ⇒ "a", "r"
-	if tok.Type() != terex.TokenType { // not a TAG token
-		panic("cannot make suffixes from non-token tag")
-	}
-	T().Infof("TAG = %v", tok) // TAG is []string, e.g. "a.r" ⇒ "a", "r"
-	e := convertTerminalToken(terex.Elem(tok), env)
-	tag := e.AsAtom().Data.(*terex.Token).Value.([]string)
-	var l *terex.GCons           // create list of suffix nodes, one for each suffix
-	for _, suffix := range tag { // TAG="a.r" ⇒ "a", "r"
-		node := terex.Cons(terex.Atomize(suffixOp), terex.Cons(terex.Atomize(suffix), nil))
-		l = l.Branch(node) // branch = (#suffix X)
-	} // now: ( (#suffix "a") (#suffix "r") )
-	return l
 }
 
 // === Terminal tokens =======================================================
@@ -457,16 +219,6 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 		}
 		t.Value = tags
 		T().Debugf("TAG = %v", t.Value)
-	case tokenIds["NullaryOp"]:
-		fallthrough
-	case tokenIds["UnaryOp"]:
-		fallthrough
-	case tokenIds["PrimaryOp"]:
-		fallthrough
-	case tokenIds["SecondaryOp"]:
-		fallthrough
-	case tokenIds["RelationOp"]:
-		t.Value = string(token.Lexeme)
 	default:
 		t.Value = string(token.Lexeme)
 	}
@@ -533,22 +285,22 @@ func callFromEnvironment(opname string, e terex.Element, env *terex.Environment)
 
 // TODO This is probably unnecessary
 
-type symbolPreservingResolver struct{}
+// type symbolPreservingResolver struct{}
 
-func (r symbolPreservingResolver) Resolve(atom terex.Atom, env *terex.Environment, asOp bool) (
-	terex.Element, error) {
-	if atom.Type() == terex.TokenType {
-		t := atom.Data.(*terex.Token)
-		token := t.Token.(*lexmachine.Token)
-		T().Debugf("Resolve terminal token: '%v'", string(token.Lexeme))
-		switch token.Type {
-		case tokenIds["NUM"]:
-			return terex.Elem(t.Value.(float64)), nil
-		case tokenIds["STRING"]:
-			return terex.Elem(t.Value.(string)), nil
-		}
-	}
-	return terex.Elem(atom), nil
-}
+// func (r symbolPreservingResolver) Resolve(atom terex.Atom, env *terex.Environment, asOp bool) (
+// 	terex.Element, error) {
+// 	if atom.Type() == terex.TokenType {
+// 		t := atom.Data.(*terex.Token)
+// 		token := t.Token.(*lexmachine.Token)
+// 		T().Debugf("Resolve terminal token: '%v'", string(token.Lexeme))
+// 		switch token.Type {
+// 		case tokenIds["NUM"]:
+// 			return terex.Elem(t.Value.(float64)), nil
+// 		case tokenIds["STRING"]:
+// 			return terex.Elem(t.Value.(string)), nil
+// 		}
+// 	}
+// 	return terex.Elem(atom), nil
+// }
 
-var _ terex.SymbolResolver = symbolPreservingResolver{}
+// var _ terex.SymbolResolver = symbolPreservingResolver{}

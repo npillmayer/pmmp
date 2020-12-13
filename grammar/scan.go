@@ -61,6 +61,7 @@ const (
 	BinaryTransform int = -23
 	PlusOrMinus     int = -24
 	Type            int = -25
+	PseudoOp        int = -26
 	Keyword         int = -30
 )
 
@@ -142,6 +143,7 @@ func initTokens() {
 		tokenIds["PlusOrMinus"] = PlusOrMinus
 		tokenIds["Type"] = Type
 		tokenIds["Keyword"] = Keyword
+		tokenIds["PseudoOp"] = PseudoOp
 		for _, lit := range literals {
 			r := lit[0]
 			tokenIds[lit] = int(r)
@@ -200,10 +202,10 @@ func Lexer() (*scanner.LMAdapter, error) {
 	init := func(lexer *lexmachine.Lexer) {
 		lexer.Add([]byte(`%[^\n]*\n?`), scanner.Skip) // skip comments
 		lexer.Add([]byte(`\"[^"]*\"`), makeToken("STRING"))
-		lexer.Add([]byte(`[\+\-]\d+(\.\d+)?`), makeToken("Signed")) // float
-		lexer.Add([]byte(`[\+\-]\d+(/\d+)?`), makeToken("Signed"))  // fraction
-		lexer.Add([]byte(`\d+(\.\d+)?`), makeToken("Unsigned"))     // float
-		lexer.Add([]byte(`\d+(/\d+)?`), makeToken("Unsigned"))      // fraction
+		//lexer.Add([]byte(`[\+\-]\d+(\.\d+)?`), makeToken("Signed")) // float
+		//lexer.Add([]byte(`[\+\-]\d+(/\d+)?`), makeToken("Signed"))  // fraction
+		lexer.Add([]byte(`\d+(\.\d+)?`), makeToken("Unsigned")) // float
+		lexer.Add([]byte(`\d+(/\d+)?`), makeToken("Unsigned"))  // fraction
 		lexer.Add([]byte(`([a-zA-Z']|')+`), makeSymbol())
 		lexer.Add([]byte(`([a-zA-Z'])+(\.([a-zA-Z'])+)+`), makeSymbol())
 		lexer.Add([]byte(`( |\t|\n|\r)+`), scanner.Skip) // skip whitespace
@@ -287,7 +289,7 @@ func makeLMToken(tokcat string, lexeme string) *terex.Token {
 		Value:  nil,
 	}
 	return &terex.Token{
-		Name:  lexeme,
+		Name:  tokcat,
 		Token: lmtok,
 		Value: lexeme,
 	}

@@ -12,14 +12,14 @@
 	| ⟨secondary⟩  PrimaryOp  ⟨primary⟩ 
 
 ⟨primary⟩ → ⟨atom⟩ 
-	| ( ⟨numeric expression⟩ , ⟨numeric expression⟩ )
+	| ( ⟨expression⟩ , ⟨expression⟩ )
 	| UnaryOp  ⟨primary⟩ 
 	| PlusOrMinus  ⟨primary⟩ 
 
 ⟨atom⟩ → ⟨variable⟩ 
-	| Signed ⟨variable⟩ 
+#	| Signed ⟨variable⟩ 
 	| Unsigned ⟨variable⟩ 
-	| Signed
+#	| Signed
 	| Unsigned
 	| NullaryOp
 	| ( ⟨expression⟩ )
