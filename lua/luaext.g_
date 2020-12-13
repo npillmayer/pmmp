@@ -5,6 +5,7 @@ import (
 
 	"github.com/npillmayer/arithm/polyn"
 	"github.com/npillmayer/gorgo/runtime"
+	"github.com/npillmayer/pmmp"
 	"github.com/npillmayer/pmmp/variables"
 	"github.com/shopspring/decimal"
 	lua "github.com/yuin/gopher-lua"
@@ -222,18 +223,18 @@ func (it *ScriptingReturnValueIterator) Next() bool {
 // the value of the scripting argument under the iterator's cursor.
 // Returns the value and a type (see package 'variables' for the
 // definition of variable types).
-func (it *ScriptingReturnValueIterator) Value() (interface{}, variables.VariableType) {
+func (it *ScriptingReturnValueIterator) Value() (interface{}, pmmp.ValueType) {
 	if it.inx < len(it.values.values) {
 		a := it.values.values[it.inx]
 		if a == nil {
-			return nil, variables.Undefined
+			return nil, pmmp.Undefined
 		} else if v, ok := isNumericConstant(a); ok {
-			return v, variables.NumericType
+			return v, pmmp.NumericType
 		} else {
 			T().Errorf("not yet implemented: type for %v", a)
 		}
 	}
-	return nil, variables.Undefined
+	return nil, pmmp.Undefined
 }
 
 // ValueAsExprNode gets
