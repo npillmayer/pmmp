@@ -40,7 +40,7 @@ func (intp *Interpreter) Start(program *terex.GCons, env *terex.Environment) (er
 		if err != nil {
 			return
 		}
-		pc := intp.IR(terex.Elem(intp.PC.Cdr), env)
+		pc := intp.IR(terex.Elem(intp.PC), env)
 		if pc.IsNil() {
 			intp.PC = intp.PC.Cdr
 		} else {
@@ -92,8 +92,8 @@ func (intp *Interpreter) fetch(astNode *terex.GCons) (instruction, error) {
 // used by operators, which will have been passed an envronment which
 // includes a symbol for the calling interpreter's evaluator.
 //
-func (intp *Interpreter) GetEvaluator(env *terex.Environment) *Evaluator {
-	esym := intp.env.FindSymbol("$Evaluator", true)
+func GetEvaluator(env *terex.Environment) *Evaluator {
+	esym := env.FindSymbol("$Evaluator", true)
 	if esym == nil {
 		panic("no evaluator present")
 	}

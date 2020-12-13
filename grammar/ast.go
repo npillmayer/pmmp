@@ -46,7 +46,8 @@ func (trew *mpTermR) Descend(sppf.RuleCtxt) bool {
 }
 
 func (trew *mpTermR) Call(e terex.Element, env *terex.Environment) terex.Element {
-	return callFromEnvironment(trew.opname, e, env)
+	panic("pmmp term rewriter not intended to be 'call'ed")
+	//return callFromEnvironment(trew.opname, e, env)
 }
 
 // --- Init global rewriters -------------------------------------------------
@@ -270,5 +271,6 @@ func (po *mpPseudoOp) String() string {
 }
 
 func (po *mpPseudoOp) Call(e terex.Element, env *terex.Environment) terex.Element {
-	return callFromEnvironment(po.name, e, env)
+	T().Errorf("PseudoOperator not to be called")
+	return terex.Elem(nil)
 }

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/npillmayer/pmmp"
+
 	"github.com/npillmayer/gorgo/lr"
 	"github.com/npillmayer/gorgo/lr/earley"
 	"github.com/npillmayer/gorgo/lr/scanner"
@@ -236,18 +238,18 @@ func splitTagName(tagname string) ([]string, error) {
 
 // --- Operator wrapper ------------------------------------------------------
 
-type wrapOp struct {
-	terminalToken *terex.Token
-}
+// type wrapOp struct {
+// 	terminalToken *terex.Token
+// }
 
-func (w wrapOp) String() string {
-	// will result in "##<opname>:<op-category>"
-	return "#" + w.Opname() + ":" + w.terminalToken.Name
-}
+// func (w wrapOp) String() string {
+// 	// will result in "##<opname>:<op-category>"
+// 	return "#" + w.Opname() + ":" + w.terminalToken.Name
+// }
 
-func (w wrapOp) Opname() string {
-	return w.terminalToken.Value.(string)
-}
+// func (w wrapOp) Opname() string {
+// 	return w.terminalToken.Value.(string)
+// }
 
 func wrapOpToken(a terex.Atom) terex.Operator {
 	a = convertTerminalToken(terex.Elem(a), nil).AsAtom()
@@ -256,30 +258,30 @@ func wrapOpToken(a terex.Atom) terex.Operator {
 		panic(fmt.Sprintf("value of token '%s' is nil, not operator name", tokname))
 	}
 	tok := a.Data.(*terex.Token)
-	return wrapOp{terminalToken: tok}
+	return pmmp.NewTokenOperator(tok)
 }
 
 // Call delegates the operator call to a symbol in the environment.
 // The symbol is searched for with the literal value of the operator.
-func (w wrapOp) Call(e terex.Element, env *terex.Environment) terex.Element {
-	return callFromEnvironment(w.Opname(), e, env)
-}
+// func (w wrapOp) Call(e terex.Element, env *terex.Environment) terex.Element {
+// 	return callFromEnvironment(w.Opname(), e, env)
+// }
 
-var _ terex.Operator = &wrapOp{}
+// var _ terex.Operator = &wrapOp{}
 
-func callFromEnvironment(opname string, e terex.Element, env *terex.Environment) terex.Element {
-	opsym := env.FindSymbol(opname, true)
-	if opsym == nil {
-		T().Errorf("Cannot find parsing operation %s", opname)
-		return e
-	}
-	operator, ok := opsym.Value.AsAtom().Data.(terex.Operator)
-	if !ok {
-		T().Errorf("Cannot call parsing operation %s", opname)
-		return e
-	}
-	return operator.Call(e, env)
-}
+// func callFromEnvironment(opname string, e terex.Element, env *terex.Environment) terex.Element {
+// 	opsym := env.FindSymbol(opname, true)
+// 	if opsym == nil {
+// 		T().Errorf("Cannot find parsing operation %s", opname)
+// 		return e
+// 	}
+// 	operator, ok := opsym.Value.AsAtom().Data.(terex.Operator)
+// 	if !ok {
+// 		T().Errorf("Cannot call parsing operation %s", opname)
+// 		return e
+// 	}
+// 	return operator.Call(e, env)
+// }
 
 // --- Symbol resolver -------------------------------------------------------
 
