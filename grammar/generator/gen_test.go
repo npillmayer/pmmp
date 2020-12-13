@@ -10,10 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/npillmayer/pmmp/grammar"
-	"github.com/npillmayer/schuko/gtrace"
-	"github.com/npillmayer/schuko/tracing"
-	"github.com/npillmayer/schuko/tracing/gotestingadapter"
 	"golang.org/x/text/width"
 )
 
@@ -152,13 +148,4 @@ func initSymbols() {
 func NoTestM(t *testing.T) {
 	s := "| btex ⟨typesetting commands⟩ etex"
 	fmt.Printf("m => %s\n", renameNonterms(s))
-}
-
-func TestMPG(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
-	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
-	grammar.MakeMetaPostGrammar()
-	t.Fail()
 }
