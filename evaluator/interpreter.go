@@ -14,8 +14,6 @@ var ErrNoProgramToExecute error = errors.New("no program to execute")
 
 // Interpreter interprets PMMP programs.
 type Interpreter struct {
-	//PC        *terex.GCons // program counter
-	//IR        instruction  // instruction register
 	evaluator *Evaluator   // expression evaluator and interpreter runtime
 	ast       *terex.GCons // program code to execute
 	env       *terex.Environment
@@ -53,7 +51,7 @@ func (th Thread) Fork(pc *terex.GCons) *Thread {
 		intp:     th.intp,
 	}
 	createThreadLocalEnv(t)
-	go t.Run()
+	go t.run()
 	return t
 }
 
@@ -68,7 +66,7 @@ func (th *Thread) Result() <-chan *terex.GCons {
 }
 
 // Run starts fetch-decode-execute of a thread.
-func (th *Thread) Run() {
+func (th *Thread) run() {
 	T().Debugf("thread starts at %s", terex.Elem(th.PC.Car))
 	th.args = <-th.argsCh // synchronous wait for args, even if none
 	T().Debugf("thread received arguments %s", terex.Elem(th.args))
@@ -82,7 +80,6 @@ func (th *Thread) Run() {
 		// } // TODO other than tree-driven FDE ?
 		//th.PC = th.PC.Cdr
 	}
-	// th.result <- ??? // TODO
 	th.resultCh <- result.AsList()
 }
 
@@ -128,12 +125,6 @@ func (intp *Interpreter) Start(program *terex.GCons, env *terex.Environment) (*t
 	return r, nil
 }
 
-type instruction func(terex.Element, *terex.Environment) terex.Element
-
-func nop(terex.Element, *terex.Environment) terex.Element {
-	return terex.Elem(nil)
-}
-
 // Fetch the instruction belonging to operator op.
 // We do not call the operator directly, but rather search for an operator-symbol
 // in the current environment and fetch its 'Call' method.
@@ -151,11 +142,7 @@ func (intp *Interpreter) fetch(astNode *terex.GCons) (instruction, error) {
 		T().Errorf("fetch saw non-operator")
 		return nop, fmt.Errorf("op fetch saw: %v", astNode.Car)
 	}
-	//op, ok := e.AsAtom().Data.(terex.Operator)
-	//opname := op.String()
-	//opname := op.Value
 	op := e.First().AsAtom().Data.(pmmp.TokenOperator)
-	//return op.Opname(), op.Token().Name, evaluator
 	opname := op.Token().Name
 	opsym := intp.env.FindSymbol(opname, true)
 	if opsym == nil {
@@ -203,4 +190,10 @@ func createThreadLocalEnv(th *Thread) {
 
 func isEOF(pc *terex.GCons) bool {
 	return false // TODO
+}
+
+type instruction func(terex.Element, *terex.Environment) terex.Element
+
+func nop(terex.Element, *terex.Environment) terex.Element {
+	return terex.Elem(nil)
 }
