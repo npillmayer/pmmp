@@ -45,6 +45,16 @@ type ValueBase struct {
 	V Value
 }
 
+func (b ValueBase) String() string {
+	if b.IsNumeric() {
+		return b.AsNumeric().Polynomial().String()
+	} else if b.IsPair() {
+		p := b.AsPair()
+		return "(" + p.xpart.Self().String() + "," + p.ypart.Self().String() + ")"
+	}
+	return fmt.Sprintf("%v", b.V)
+}
+
 // IsNumeric is a predicate: is it a Numeric?
 func (b ValueBase) IsNumeric() bool {
 	_, ok := b.V.(Numeric)
@@ -141,6 +151,12 @@ func (n Numeric) AsFloat() float64 {
 		return math.NaN()
 	}
 	return polyn.Polynomial(n).GetConstantValue()
+}
+
+// Plus is n + m.
+func (n Numeric) Plus(m Numeric) Numeric {
+	r := polyn.Polynomial(n).Add(polyn.Polynomial(m), false)
+	return Numeric(r)
 }
 
 // Minus is n - m.

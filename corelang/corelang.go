@@ -62,7 +62,7 @@ import (
 
 // T traces to the global interpreter tracer
 func T() tracing.Trace {
-	return gtrace.InterpreterTracer
+	return gtrace.SyntaxTracer
 }
 
 // S traces to the global scripting tracer
