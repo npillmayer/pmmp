@@ -1,7 +1,14 @@
-⟨expression⟩ → ⟨subexpression⟩ 
-	| ⟨expression⟩  RelationOp  ⟨tertiary⟩ 
+⟨S⟩ → ⟨boolean expression⟩
+	| ⟨tertiary⟩
+	| ⟨declaration⟩
+	| ⟨equation⟩
 
-⟨subexpression⟩ → ⟨tertiary⟩ 
+⟨boolean expression⟩ → ⟨tertiary⟩  RelationOp  ⟨tertiary⟩ 
+
+#⟨path expression⟩ → ⟨path subexpression⟩ 
+#	| ⟨expression⟩  RelationOp  ⟨tertiary⟩  # DROP THAT
+
+#⟨path subexpression⟩ → ⟨tertiary⟩ 
 #	| ⟨path expression⟩  ⟨path join⟩  ⟨path knot⟩ 
 
 ⟨tertiary⟩ → ⟨secondary⟩ 
@@ -12,9 +19,11 @@
 	| ⟨secondary⟩  PrimaryOp  ⟨primary⟩ 
 
 ⟨primary⟩ → ⟨atom⟩ 
-	| ( ⟨expression⟩ , ⟨expression⟩ )
+	| ( ⟨tertiary⟩ , ⟨tertiary⟩ )
 	| UnaryOp  ⟨primary⟩ 
 	| PlusOrMinus  ⟨primary⟩ 
+	| OfOp  ⟨tertiary⟩ of ⟨primary⟩ 
+	| ⟨atom⟩ [ ⟨tertiary⟩ , ⟨tertiary⟩ ]
 
 ⟨atom⟩ → ⟨variable⟩ 
 #	| Signed ⟨variable⟩ 
@@ -22,7 +31,7 @@
 #	| Signed
 	| Unsigned
 	| NullaryOp
-	| ( ⟨expression⟩ )
+	| ( ⟨tertiary⟩ )
 
 ⟨variable⟩ → TAG ⟨suffix⟩ 
 
@@ -31,7 +40,26 @@
 	| ⟨suffix⟩ TAG 
 
 ⟨subscript⟩ → Unsigned 
-	| [ ⟨expression⟩ ]
+	| [ ⟨tertiary⟩ ]
+
+⟨equation⟩ → ⟨tertiary⟩ = ⟨right hand side⟩ 
+
+⟨assignment⟩ → ⟨variable⟩ := ⟨right hand side⟩ 
+
+⟨right hand side⟩ → ⟨tertiary⟩ 
+	| ⟨equation⟩ 
+	| ⟨assignment⟩ 
+
+⟨declaration⟩ → Type  ⟨declaration list⟩ 
+
+⟨declaration list⟩ → ⟨generic variable⟩ 
+	| ⟨declaration list⟩ , ⟨generic variable⟩ 
+
+⟨generic variable⟩ → TAG  ⟨generic suffix⟩ 
+
+⟨generic suffix⟩ → ⟨empty⟩ 
+	| ⟨generic suffix⟩  TAG
+	| ⟨generic suffix⟩ []
 
 
 STOP -----------------------------------------------

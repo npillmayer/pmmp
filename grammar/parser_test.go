@@ -57,6 +57,10 @@ func TestParseList(t *testing.T) {
 	parse("xpart z", false, t)
 	parse("a * xpart z", false, t)
 	parse("x.r' < -1/4", false, t)
+	parse("numeric p", false, t)
+	parse("pair p[]", false, t)
+	parse("a = 1", false, t)
+	parse("a=b=5", false, t)
 }
 
 func TestVariableAST1(t *testing.T) {
@@ -127,6 +131,46 @@ func TestPair1(t *testing.T) {
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	compile("b+(1,3a)", t)
+}
+
+func TestInterpolation(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("-a[1,3b]", t)
+}
+
+func TestOf(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("point 2 of p", t)
+}
+
+func TestDeclaration1(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("pair p, q", t)
+}
+
+func TestDeclaration2(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("pair p[]r", t)
+}
+
+func TestEquation1(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	ast := compile("a=b=c=5", t)
+	l := terex.Elem(ast).Sublist().AsList().Length() - 1
+	t.Logf("eqs = %v", terex.Elem(ast).Sublist())
+	if l != 3 {
+		t.Errorf("expected sequence of 3 equations, got %d", l)
+	}
 }
 
 // ---------------------------------------------------------------------------

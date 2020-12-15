@@ -36,6 +36,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  */
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"unicode"
 
@@ -67,7 +68,7 @@ const (
 
 // The tokens representing literal one-char lexemes
 var literals = []string{
-	";", "(", ")", "[", "]", ",",
+	";", "(", ")", "[", "]", ",", "=",
 }
 
 var types = []string{
@@ -87,7 +88,7 @@ var primOps = []string{`\*`, `\/`, `\*\*`, "and", "dotprod", "div", "mod"}
 var secOps = []string{`\+\+`, `\+\-\+`, "or", "intersectionpoint"}
 var sign = []string{`\+`, `\-`}
 var relOps = []string{
-	`=`, `<`, `>`, `≤`, `≥`, `≠`, `<=`, `>=`, `!=`, `<>`,
+	`==`, `<`, `>`, `≤`, `≥`, `≠`, `<=`, `>=`, `!=`, `<>`,
 	`\&`, "cutbefore", "cutafter",
 }
 var assignOps = []string{`:=`, `←`}
@@ -106,7 +107,8 @@ var binTransf = []string{
 // The keyword tokens
 var keywords = []string{ // TODO
 	"of",
-	`\-\-`, `\.\.`, `\.\.\.`, "tension", "controls",
+	`\[\]`,
+	`--`, `\.\.`, `\.\.\.`, "tension", "controls",
 	"begingroup", "endgroup",
 	"def", "vardef",
 	"picture", "end",
@@ -182,7 +184,8 @@ func initTokens() {
 			tokenIds[t] = Type
 		}
 		for i, k := range keywords {
-			tokenIds[k] = Keyword + i
+			tokenIds[k] = Keyword - i
+			tokenIds[unescape(k)] = Keyword - i
 		}
 	})
 }
@@ -293,4 +296,8 @@ func makeLMToken(tokcat string, lexeme string) *terex.Token {
 		Token: lmtok,
 		Value: lexeme,
 	}
+}
+
+func unescape(s string) string {
+	return strings.ReplaceAll(s, `\`, "")
 }
