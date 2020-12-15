@@ -61,6 +61,7 @@ func TestParseList(t *testing.T) {
 	parse("pair p[]", false, t)
 	parse("a = 1", false, t)
 	parse("a=b=5", false, t)
+	parse("a shifted (1,2)", false, t)
 }
 
 func TestVariableAST1(t *testing.T) {
@@ -165,12 +166,38 @@ func TestEquation1(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
-	ast := compile("a=b=c=5", t)
+	ast := compile("a=b=c:=5", t)
 	l := terex.Elem(ast).Sublist().AsList().Length() - 1
 	t.Logf("eqs = %v", terex.Elem(ast).Sublist())
 	if l != 3 {
 		t.Errorf("expected sequence of 3 equations, got %d", l)
 	}
+	t.Fail()
+}
+
+func TestTransformerUn(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("a shifted (1,2)", t)
+	// l := terex.Elem(ast).Sublist().AsList().Length() - 1
+	// t.Logf("eqs = %v", terex.Elem(ast).Sublist())
+	// if l != 3 {
+	// 	t.Errorf("expected sequence of 3 equations, got %d", l)
+	// }
+}
+
+func TestTransformerBin(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("a reflectedabout(b,2)", t)
+	// l := terex.Elem(ast).Sublist().AsList().Length() - 1
+	// t.Logf("eqs = %v", terex.Elem(ast).Sublist())
+	// if l != 3 {
+	// 	t.Errorf("expected sequence of 3 equations, got %d", l)
+	// }
+	t.Fail()
 }
 
 // ---------------------------------------------------------------------------

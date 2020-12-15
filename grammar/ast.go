@@ -66,6 +66,8 @@ var declOp *mpTermR       // for declaration -> ... productions
 var declvarOp *mpTermR    // for generic_variable -> ... productions
 var declsuffixOp *mpTermR // for generic_suffix -> ... productions
 var eqOp *mpTermR         // for equation -> ... productions
+var assignOp *mpTermR     // for assignment -> ... productions
+var transformOp *mpTermR  // for transformmer -> ... productions
 
 func initRewriters() {
 	atomOp = makeASTTermR("atom", "atom")
@@ -174,11 +176,19 @@ func initRewriters() {
 	}
 	secondaryOp = makeASTTermR("secondary", "secondary")
 	secondaryOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨secondary⟩ → ⟨primary⟩ | ⟨secondary⟩ PrimaryOp ⟨primary⟩
+		// ⟨secondary⟩ → ⟨primary⟩
+		//     | ⟨secondary⟩ PrimaryOp ⟨primary⟩
+		//     | ⟨secondary⟩  ⟨transformer⟩
 		T().Infof("secondary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) {
 			return terex.Elem(l.Cdar()) // ⟨secondary⟩ → ⟨primary⟩
+		}
+		if isSubAST(l.Cddar(), "UnaryTransform") || isSubAST(l.Cddar(), "BinaryTransform") {
+			transf := terex.Elem(l.Cddar()).Sublist().AsList().Car
+			targ := terex.Elem(l.Cddar()).Sublist().AsList().Cdr
+			l := terex.Cons(transf, terex.Cons(l.Cdar(), targ))
+			return terex.Elem(l)
 		}
 		// ⟨secondary⟩ PrimaryOp ⟨primary⟩ ⇒ ( PrimaryOp ⟨secondary⟩ ⟨primary⟩ )
 		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
@@ -283,27 +293,55 @@ func initRewriters() {
 	eqOp = makeASTTermR("equation", "equation")
 	eqOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨equation⟩ → ⟨tertiary⟩ = ⟨right hand side⟩
-		// ⟨right hand side⟩ → ⟨tertiary⟩ | ⟨equation⟩
+		// ⟨right hand side⟩ → ⟨tertiary⟩ | ⟨equation⟩ | ⟨assignment⟩
 		T().Infof("equation tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
-		rhs := l.Nth(4)
-		if isSubAST(rhs, "equation") {
-			rlhs := terex.Elem(rhs).Sublist().AsList().Cdar() //.(*terex.GCons).Cadr()
-			T().Errorf("lhs = %v", terex.Elem(rlhs))
-			neweq := terex.List(eqOp, l.Cdar(), rlhs)
-			eqs := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "equations")))
-			l = terex.List(terex.Atomize(eqs), rhs, neweq)
-		} else if isSubAST(rhs, "equations") {
-			rhseqs := terex.Elem(rhs).Sublist()
-			lasteq := terex.Elem(rhseqs).AsList().Last().Car
-			lastlhs := lasteq.Data.(*terex.GCons).Cdar()
-			neweq := terex.List(eqOp, l.Cdar(), lastlhs)
-			l = rhseqs.AsList().Append(terex.Cons(terex.Atomize(neweq), nil))
-		} else { // ⟨right hand side⟩ → ⟨tertiary⟩
-			l = terex.List(l.Car, l.Cdar(), l.Nth(4))
-		}
+		l = equation(eqOp, l)
 		return terex.Elem(l)
 	}
+	assignOp = makeASTTermR("assignment", "assignment")
+	assignOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨assignment⟩ → ⟨variable⟩ := ⟨right hand side⟩
+		// ⟨right hand side⟩ → ⟨tertiary⟩ | ⟨equation⟩ | ⟨assignment⟩
+		T().Infof("assignment tree = ")
+		terex.Elem(l).Dump(tracing.LevelInfo)
+		l = equation(assignOp, l)
+		return terex.Elem(l)
+	}
+	transformOp = makeASTTermR("transformer", "transformer")
+	transformOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨transformer⟩ → UnaryTransform ⟨primary⟩
+		//     | BinaryTransform ( ⟨tertiary⟩ , ⟨tertiary⟩ )
+		T().Infof("transformer tree = ")
+		terex.Elem(l).Dump(tracing.LevelInfo)
+		opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+		if tokenArgEq(l, BinaryTransform) {
+			l := terex.List(opAtom, l.Nth(4), l.Nth(6))
+			//T().Errorf("l = %v", terex.Elem(l))
+			return terex.Elem(l)
+		}
+		return terex.Elem(terex.Cons(opAtom, l.Cddr()))
+	}
+}
+
+func equation(op terex.Operator, l *terex.GCons) *terex.GCons {
+	rhs := l.Nth(4)
+	if isSubAST(rhs, "equation") || isSubAST(rhs, "assignment") {
+		rlhs := terex.Elem(rhs).Sublist().AsList().Cdar() //.(*terex.GCons).Cadr()
+		T().Errorf("lhs = %v", terex.Elem(rlhs))
+		neweq := terex.List(eqOp, l.Cdar(), rlhs)
+		eqs := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "equations")))
+		l = terex.List(terex.Atomize(eqs), rhs, neweq)
+	} else if isSubAST(rhs, "equations") {
+		rhseqs := terex.Elem(rhs).Sublist()
+		lasteq := terex.Elem(rhseqs).AsList().Last().Car
+		lastlhs := lasteq.Data.(*terex.GCons).Cdar()
+		neweq := terex.List(eqOp, l.Cdar(), lastlhs)
+		l = rhseqs.AsList().Append(terex.Cons(terex.Atomize(neweq), nil))
+	} else { // ⟨right hand side⟩ → ⟨tertiary⟩
+		l = terex.List(l.Car, l.Cdar(), rhs) //l.Nth(4))
+	}
+	return l
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +361,7 @@ func tokenArg(l *terex.GCons) bool {
 	return l != nil && l.Length() > 1 && l.Cdar().Type() == terex.TokenType
 }
 
-// TokenArgEq is a predicate: is the argument a token?
+// TokenArgEq is a predicate: is the argument a token equal to tokval?
 func tokenArgEq(l *terex.GCons, tokval int) bool {
 	if l != nil && l.Length() > 1 && l.Cdar().Type() == terex.TokenType {
 		t := l.Cdar().Data.(*terex.Token)
@@ -356,9 +394,9 @@ func isToken(a terex.Atom, tcat string) bool {
 	T().Errorf("isToken: %v", terex.Elem(a).AsList().Car)
 	if a.Type() == terex.OperatorType {
 		o := a.Data.(terex.Operator)
-		T().Errorf("o = %v", o)
+		//T().Errorf("o = %v", o)
 		if tok, ok := o.(pmmp.TokenOperator); ok {
-			if tok.Token().Value == tcat {
+			if tok.Token().Value == tcat || tok.Token().Name == tcat {
 				return true
 			}
 		} else if o.String() == tcat {

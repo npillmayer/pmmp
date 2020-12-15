@@ -17,6 +17,7 @@
 
 ⟨secondary⟩ → ⟨primary⟩ 
 	| ⟨secondary⟩  PrimaryOp  ⟨primary⟩ 
+	| ⟨secondary⟩  ⟨transformer⟩ 
 
 ⟨primary⟩ → ⟨atom⟩ 
 	| ( ⟨tertiary⟩ , ⟨tertiary⟩ )
@@ -32,6 +33,9 @@
 	| Unsigned
 	| NullaryOp
 	| ( ⟨tertiary⟩ )
+
+⟨transformer⟩ → UnaryTransform ⟨primary⟩ 
+	| BinaryTransform ( ⟨tertiary⟩ , ⟨tertiary⟩ )
 
 ⟨variable⟩ → TAG ⟨suffix⟩ 
 
