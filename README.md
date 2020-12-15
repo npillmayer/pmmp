@@ -1,5 +1,5 @@
 <img src="http://npillmayer.github.io/img/pmmp.png" alt="Poor Man's MetaPost"
-    width="200px" style="max-width:200px"/>
+    width="100px" style="max-width:100px"/>
 
 ### Poor Man's MetaPost
 
