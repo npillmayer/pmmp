@@ -1,15 +1,18 @@
-⟨S⟩ → ⟨boolean expression⟩
-	| ⟨tertiary⟩
-	| ⟨declaration⟩
-	| ⟨equation⟩
+⟨S⟩ → ⟨statement list⟩
+
+⟨statement list⟩ → ⟨empty⟩ 
+	| ⟨statement⟩ ; ⟨statement list⟩ 
+
+⟨statement⟩ → ⟨empty⟩ 
+	| ⟨equation⟩ 
+	| ⟨assignment⟩ 
+	| ⟨declaration⟩ 
+	| ⟨path expression⟩ 
 
 ⟨boolean expression⟩ → ⟨tertiary⟩  RelationOp  ⟨tertiary⟩ 
 
-#⟨path expression⟩ → ⟨path subexpression⟩ 
-#	| ⟨expression⟩  RelationOp  ⟨tertiary⟩  # DROP THAT
-
-#⟨path subexpression⟩ → ⟨tertiary⟩ 
-#	| ⟨path expression⟩  ⟨path join⟩  ⟨path knot⟩ 
+⟨tertiary list⟩ → ⟨tertiary⟩ 
+	| ⟨tertiary list⟩ , ⟨tertiary⟩ 
 
 ⟨tertiary⟩ → ⟨secondary⟩ 
 	| ⟨tertiary⟩  SecondaryOp  ⟨secondary⟩ 
@@ -32,10 +35,37 @@
 #	| Signed
 	| Unsigned
 	| NullaryOp
+	| ⟨function call⟩
 	| ( ⟨tertiary⟩ )
 
 ⟨transformer⟩ → UnaryTransform ⟨primary⟩ 
 	| BinaryTransform ( ⟨tertiary⟩ , ⟨tertiary⟩ )
+
+⟨path expression⟩ → ⟨tertiary⟩ 
+	| ⟨path expression⟩  ⟨path join⟩  ⟨path knot⟩ 
+
+⟨path knot⟩ → ⟨tertiary⟩ 
+
+⟨path join⟩ → --
+	| ⟨direction specifier⟩  ⟨basic path join⟩  ⟨direction specifier⟩ 
+
+⟨direction specifier⟩ → ⟨empty⟩ 
+	| { curl ⟨tertiary⟩ }
+	| { ⟨tertiary⟩ }
+	| { ⟨tertiary⟩ , ⟨tertiary⟩ }
+
+⟨basic path join⟩ → ..
+	| ...
+	| .. ⟨tension⟩ ..
+	| .. ⟨controls⟩ ..
+
+⟨tension⟩ → tension ⟨primary⟩ 
+	| tension ⟨primary⟩ and ⟨primary⟩ 
+
+⟨controls⟩ → controls ⟨primary⟩ 
+	| controls ⟨primary⟩ and ⟨primary⟩ 
+
+⟨function call⟩ → Function ( ⟨tertiary list⟩ )
 
 ⟨variable⟩ → TAG ⟨suffix⟩ 
 

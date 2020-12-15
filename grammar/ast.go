@@ -54,20 +54,30 @@ func (trew *mpTermR) Call(e terex.Element, env *terex.Environment) terex.Element
 
 // --- Init global rewriters -------------------------------------------------
 
-var atomOp *mpTermR       // for atom -> ... productions
-var varOp *mpTermR        // for variable -> ... productions
-var suffixOp *mpTermR     // for suffix -> ... productions
-var subscrOp *mpTermR     // for subscript -> ... productions
-var primaryOp *mpTermR    // for primary -> ... productions
-var secondaryOp *mpTermR  // for secondary -> ... productions
-var tertiaryOp *mpTermR   // for tertiary -> ... productions
-var exprOp *mpTermR       // for expression -> ... productions
-var declOp *mpTermR       // for declaration -> ... productions
-var declvarOp *mpTermR    // for generic_variable -> ... productions
-var declsuffixOp *mpTermR // for generic_suffix -> ... productions
-var eqOp *mpTermR         // for equation -> ... productions
-var assignOp *mpTermR     // for assignment -> ... productions
-var transformOp *mpTermR  // for transformmer -> ... productions
+var atomOp *mpTermR         // for atom -> … productions
+var varOp *mpTermR          // for variable -> … productions
+var suffixOp *mpTermR       // for suffix -> … productions
+var subscrOp *mpTermR       // for subscript -> … productions
+var primaryOp *mpTermR      // for primary -> … productions
+var secondaryOp *mpTermR    // for secondary -> … productions
+var tertiaryOp *mpTermR     // for tertiary -> … productions
+var exprOp *mpTermR         // for expression -> … productions
+var declOp *mpTermR         // for declaration -> … productions
+var declvarOp *mpTermR      // for generic_variable -> … productions
+var declsuffixOp *mpTermR   // for generic_suffix -> … productions
+var eqOp *mpTermR           // for equation -> … productions
+var assignOp *mpTermR       // for assignment -> … productions
+var transformOp *mpTermR    // for transformmer -> … productions
+var funcallOp *mpTermR      // for function_call -> … productions
+var tertiaryListOp *mpTermR // for tertiary_list -> … productions
+var stmtOp *mpTermR         // for statement -> … productions
+var stmtListOp *mpTermR     // for statement_list -> … productions
+var basicJoinOp *mpTermR    // for basic_path_join -> … productions
+var tensionOp *mpTermR      // for tension -> … productions
+var controlsOp *mpTermR     // for controls -> … productions
+var dirOp *mpTermR          // for direction_specifier -> … productions
+var joinOp *mpTermR         // for path_join -> … productions
+var pathExprOp *mpTermR     // for path_expression -> … productions
 
 func initRewriters() {
 	atomOp = makeASTTermR("atom", "atom")
@@ -265,7 +275,6 @@ func initRewriters() {
 		}
 		var suf2 terex.Element
 		tee := terex.Elem(l.Cdr).Sublist()
-		T().Errorf("----------- t = %v", terex.Elem(l))
 		if !tee.IsNil() && tee.First().AsAtom().Type() == terex.OperatorType {
 			suf2 = terex.Elem(l.Cdar()) // ( ⟨subscript⟩ X ) => ( ⟨subscript⟩ X )
 			if singleArg(l) {
@@ -322,6 +331,146 @@ func initRewriters() {
 		}
 		return terex.Elem(terex.Cons(opAtom, l.Cddr()))
 	}
+	funcallOp = makeASTTermR("function_call", "funcall")
+	funcallOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨function call⟩ → Function ( ⟨tertiary list⟩ )
+		opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+		n := l.Length()
+		x := l.Cdr.Cddr().FirstN(n - 4)
+		l = terex.Cons(opAtom, x)
+		return terex.Elem(l)
+	}
+	tertiaryListOp = makeASTTermR("tertiary_list", "tertiary_list")
+	tertiaryListOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨tertiary list⟩ → ⟨tertiary⟩ | ⟨tertiary list⟩ , ⟨tertiary⟩
+		l = l.Cdr // skip op 'tertiary_list'
+		T().Errorf("      l = %v", l.ListString())
+		comma := int(',')
+		l = l.Drop(func(a terex.Atom) bool {
+			return tokenEq(a, comma)
+		})
+		T().Errorf("filt. l = %v", l.ListString())
+		return terex.Elem(l)
+	}
+	stmtOp = makeASTTermR("statement", "stmt")
+	stmtOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨statement⟩ → ⟨empty⟩
+		//     | ⟨equation⟩ | ⟨assignment⟩ | ⟨declaration⟩
+		if withoutArgs(l) {
+			return terex.Elem(nil)
+		}
+		return terex.Elem(l)
+	}
+	stmtListOp = makeASTTermR("statement_list", "stmtlst")
+	stmtListOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨statement list⟩ → ⟨empty⟩  | ⟨statement⟩ ; ⟨statement list⟩
+		if withoutArgs(l) {
+			return terex.Elem(nil)
+		}
+		semi := int(';')
+		l = l.Cdr.Drop(func(a terex.Atom) bool {
+			return tokenEq(a, semi)
+		})
+		return terex.Elem(l)
+	}
+	basicJoinOp = makeASTTermR("basic_path_join", "basicjoin")
+	basicJoinOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨basic path join⟩ → .. | ... | .. ⟨tension⟩ .. | .. ⟨controls⟩ ..
+		//opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+		convertTerminalToken(terex.Elem(l.Cdar()), env)
+		opname := l.Cdar().Data.(*terex.Token).Value.(string)
+		t := wrapOpToken(terex.Atomize(makeLMToken("Join", opname)))
+		opAtom := terex.Atomize(t)
+		if singleArg(l) {
+			return terex.Elem(terex.Cons(opAtom, nil))
+		}
+		l = terex.Cons(opAtom, terex.Cons(l.Cddar(), nil))
+		return terex.Elem(l)
+	}
+	tensionOp = makeASTTermR("tension", "tension")
+	tensionOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨tension⟩ → tension ⟨primary⟩ | tension ⟨primary⟩ and ⟨primary⟩
+		opAtom := l.Car
+		if l.Length() == 3 {
+			l = terex.Cons(opAtom, terex.Cons(l.Cddar(), nil))
+		} else {
+			l = terex.List(opAtom, l.Cddar(), l.Nth(5))
+		}
+		return terex.Elem(l)
+	}
+	controlsOp = makeASTTermR("controls", "controls")
+	controlsOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨controls⟩ → controls ⟨primary⟩ | controls ⟨primary⟩ and ⟨primary⟩
+		opAtom := l.Car
+		if l.Length() == 3 {
+			l = terex.Cons(opAtom, terex.Cons(l.Cddar(), nil))
+		} else {
+			l = terex.List(opAtom, l.Cddar(), l.Nth(5))
+		}
+		return terex.Elem(l)
+	}
+	dirOp = makeASTTermR("direction_specifier", "dir")
+	dirOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨direction specifier⟩ → ⟨empty⟩ | { curl ⟨tertiary⟩ }
+		//     | { ⟨tertiary⟩ } | { ⟨tertiary⟩ , ⟨tertiary⟩ }
+		switch l.Length() {
+		case 1:
+			op := wrapOpToken(terex.Atomize(makeLMToken("Dir", "auto")))
+			opAtom := terex.Atomize(op)
+			l = terex.Cons(opAtom, nil)
+		case 4:
+			op := wrapOpToken(terex.Atomize(makeLMToken("Dir", "dir")))
+			opAtom := terex.Atomize(op)
+			l = terex.Cons(opAtom, terex.Cons(l.Cddar(), nil))
+		case 5:
+			//opAtom := l.Cddar()
+			op := wrapOpToken(terex.Atomize(makeLMToken("Dir", "curl")))
+			opAtom := terex.Atomize(op)
+			l = terex.Cons(opAtom, terex.Cons(l.Nth(4), nil))
+		case 6:
+			op := wrapOpToken(terex.Atomize(makeLMToken("Dir", "dir")))
+			opAtom := terex.Atomize(op)
+			p := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "make-pair")))
+			pAtom := terex.Atomize(p)
+			pl := terex.List(pAtom, l.Nth(3), l.Nth(5))
+			l = terex.Cons(opAtom, terex.Cons(terex.Atomize(pl), nil))
+		default:
+			panic("WHY?")
+		}
+		return terex.Elem(l)
+	}
+	joinOp = makeASTTermR("path_join", "join")
+	joinOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨path join⟩ → --
+		//     | ⟨direction specifier⟩  ⟨basic path join⟩  ⟨direction specifier⟩
+		if singleArg(l) {
+			convertTerminalToken(terex.Elem(l.Cdar()), env)
+			opname := l.Cdar().Data.(*terex.Token).Value.(string)
+			t := wrapOpToken(terex.Atomize(makeLMToken("Join", opname)))
+			opAtom := terex.Atomize(t)
+			return terex.Elem(terex.Cons(opAtom, nil))
+		}
+		j := l.Nth(3).Data.(*terex.GCons).Car
+		l = terex.Cons(j, l.Cdr)
+		return terex.Elem(l)
+	}
+	pathExprOp = makeASTTermR("path_expression", "pathexpr")
+	pathExprOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨path expression⟩ → ⟨tertiary⟩ | ⟨path expression⟩ ⟨path join⟩ ⟨path knot⟩
+		p := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "make-path")))
+		if withoutArgs(l) {
+			l = terex.Cons(terex.Atomize(p), l.Cdr)
+		} else {
+			sub := terex.Elem(l.Cdr).Sublist().AsList()
+			if isToken(sub.Car, "make-path") {
+				x := terex.Cons(terex.Atomize(p), sub.Cdr)
+				l = x.Append(l.Cddr())
+			} else {
+				l = terex.Cons(terex.Atomize(p), l.Cdr)
+			}
+		}
+		return terex.Elem(l)
+	}
 }
 
 func equation(op terex.Operator, l *terex.GCons) *terex.GCons {
@@ -373,6 +522,17 @@ func tokenArgEq(l *terex.GCons, tokval int) bool {
 	return false
 }
 
+func tokenEq(a terex.Atom, tokval int) bool {
+	if a.Type() == terex.TokenType {
+		convertTerminalToken(terex.Elem(a), nil)
+		t := a.Data.(*terex.Token)
+		if s, ok := t.Value.(string); ok {
+			return tokenIds[s] == tokval
+		}
+	}
+	return false
+}
+
 // KeywordArg is a predicate: is the argument a token and its lexeme at
 // least 2 characters long?
 func keywordArg(l *terex.GCons) bool {
@@ -396,7 +556,10 @@ func isToken(a terex.Atom, tcat string) bool {
 		o := a.Data.(terex.Operator)
 		//T().Errorf("o = %v", o)
 		if tok, ok := o.(pmmp.TokenOperator); ok {
-			if tok.Token().Value == tcat || tok.Token().Name == tcat {
+			T().Errorf("TOKEN: %v, %s|%s", tok, tok.Opname(), tok.Token().Name)
+			T().Errorf("TCAT = %s", tcat)
+			if tok.Opname() == tcat || tok.Token().Name == tcat {
+				T().Errorf("TOKEN TRUE")
 				return true
 			}
 		} else if o.String() == tcat {

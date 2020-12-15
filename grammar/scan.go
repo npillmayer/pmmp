@@ -63,12 +63,14 @@ const (
 	PlusOrMinus     int = -24
 	Type            int = -25
 	PseudoOp        int = -26
+	Function        int = -27
+	Join            int = -28
 	Keyword         int = -30
 )
 
 // The tokens representing literal one-char lexemes
 var literals = []string{
-	";", "(", ")", "[", "]", ",", "=",
+	";", "(", ")", "[", "]", "{", "}", ",", "=",
 }
 
 var types = []string{
@@ -103,15 +105,21 @@ var unTransf = []string{
 var binTransf = []string{
 	"reflectedabout", "reflectedaround",
 }
+var funcs = []string{
+	"min", "max", "incr", "decr",
+}
+var join = []string{
+	`--`, `\.\.`, `\.\.\.`, `---`,
+}
 
 // The keyword tokens
 var keywords = []string{ // TODO
 	"of",
 	`\[\]`,
-	`--`, `\.\.`, `\.\.\.`, "tension", "controls",
 	"begingroup", "endgroup",
 	"def", "vardef",
 	"picture", "end",
+	"tension", "and", "controls", "curl",
 }
 
 // All of the tokens (including literals and keywords)
@@ -144,6 +152,8 @@ func initTokens() {
 		tokenIds["BinaryTransform"] = BinaryTransform
 		tokenIds["PlusOrMinus"] = PlusOrMinus
 		tokenIds["Type"] = Type
+		tokenIds["Function"] = Function
+		tokenIds["Join"] = Join
 		tokenIds["Keyword"] = Keyword
 		tokenIds["PseudoOp"] = PseudoOp
 		for _, lit := range literals {
@@ -182,6 +192,13 @@ func initTokens() {
 		}
 		for _, t := range types {
 			tokenIds[t] = Type
+		}
+		for _, f := range funcs {
+			tokenIds[f] = Function
+		}
+		for _, j := range join {
+			tokenIds[j] = Join
+			tokenIds[unescape(j)] = Join
 		}
 		for i, k := range keywords {
 			tokenIds[k] = Keyword - i
@@ -223,6 +240,8 @@ func Lexer() (*scanner.LMAdapter, error) {
 	alltoks = append(alltoks, binTransf...)
 	alltoks = append(alltoks, types...)
 	alltoks = append(alltoks, sign...)
+	alltoks = append(alltoks, funcs...)
+	alltoks = append(alltoks, join...)
 	alltoks = append(alltoks, keywords...)
 	T().Debugf("all keywords: %v", alltoks)
 	adapter, err := scanner.NewLMAdapter(init, literals, alltoks, tokenIds)

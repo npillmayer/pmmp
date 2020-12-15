@@ -51,17 +51,19 @@ func TestParseList(t *testing.T) {
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
-	parse("a.r1b", false, t)
-	parse("true", false, t)
-	parse("1/2", false, t)
-	parse("xpart z", false, t)
-	parse("a * xpart z", false, t)
-	parse("x.r' < -1/4", false, t)
-	parse("numeric p", false, t)
-	parse("pair p[]", false, t)
-	parse("a = 1", false, t)
-	parse("a=b=5", false, t)
-	parse("a shifted (1,2)", false, t)
+	// parse("a.r1b", false, t)
+	// parse("true", false, t)
+	// parse("1/2", false, t)
+	// parse("xpart z", false, t)
+	// parse("a * xpart z", false, t)
+	// parse("x.r' < -1/4", false, t)
+	parse("numeric p;", false, t)
+	parse("pair p[];", false, t)
+	parse("a=1;", false, t)
+	parse("a=b=5;", false, t)
+	parse("b = a shifted (1,2)", false, t)
+	parse("pair p; p = q;", false, t)
+	parse("..tension 1.2..;", false, t)
 }
 
 func TestVariableAST1(t *testing.T) {
@@ -180,11 +182,6 @@ func TestTransformerUn(t *testing.T) {
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	compile("a shifted (1,2)", t)
-	// l := terex.Elem(ast).Sublist().AsList().Length() - 1
-	// t.Logf("eqs = %v", terex.Elem(ast).Sublist())
-	// if l != 3 {
-	// 	t.Errorf("expected sequence of 3 equations, got %d", l)
-	// }
 }
 
 func TestTransformerBin(t *testing.T) {
@@ -192,12 +189,53 @@ func TestTransformerBin(t *testing.T) {
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	compile("a reflectedabout(b,2)", t)
-	// l := terex.Elem(ast).Sublist().AsList().Length() - 1
-	// t.Logf("eqs = %v", terex.Elem(ast).Sublist())
-	// if l != 3 {
-	// 	t.Errorf("expected sequence of 3 equations, got %d", l)
-	// }
+}
+
+func TestFuncall(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("min(1,2,3)", t)
+}
+
+func TestStatement1(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("pair p; p = q;", t)
+}
+
+func TestPathJoinTension(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	//compile("..tension 1.2..;", t)
+	compile("..tension 1.2 and 4..;", t)
+}
+
+func TestPathJoinControls(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	//compile("..controls (1,2)..;", t)
+	compile("..controls (1,2) and (3,4)..;", t)
 	t.Fail()
+}
+
+func TestPathJoinCurls(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	//compile("..controls (1,2)..;", t)
+	compile("{curl 1}..controls (1,2)..;--;", t)
+}
+
+func TestPathExpression(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("z1{curl 1}..controls (1,2)..z2--z3;", t)
+	//compile("z1;", t)
 }
 
 // ---------------------------------------------------------------------------
