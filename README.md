@@ -1,4 +1,7 @@
-## Poor Man's MetaPost
+<img src="http://npillmayer.github.io/img/pmmp.png" alt="Poor Man's MetaPost"
+    width="200px" style="max-width:200px"/>
+
+### Poor Man's MetaPost
 
 This is an experimental fun project, currently without any practical purpose.
 The first draft used ANTLR as a parser generator, but I intend to migrate it
