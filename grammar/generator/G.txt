@@ -25,6 +25,7 @@
 	b.LHS("atom").T(S("Unsigned")).N("variable").End()
 	b.LHS("atom").T(S("Unsigned")).End()
 	b.LHS("atom").T(S("NullaryOp")).End()
+	b.LHS("atom").T(S("begingroup")).N("statement_list").N("tertiary").T(S("endgroup")).End()
 	b.LHS("atom").N("function_call").End()
 	b.LHS("atom").T("(", 40).N("tertiary").T(")", 41).End()
 	b.LHS("transformer").T(S("UnaryTransform")).N("primary").End()

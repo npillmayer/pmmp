@@ -83,6 +83,8 @@ func initRewriters() {
 	atomOp = makeASTTermR("atom", "atom")
 	atomOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨atom⟩ → ⟨variable⟩ | NUMBER | NullaryOp
+		//     | Unsigned ⟨variable⟩
+		//     | begingroup ⟨statement list⟩ ⟨tertiary⟩ endgroup
 		//     | ( ⟨expression⟩ )
 		T().Infof("atom tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
@@ -93,7 +95,17 @@ func initRewriters() {
 			}
 			return terex.Elem(l.Cdar())
 		}
-		if tokenArg(l) { // NUMBER ⟨variable⟩ ⇒ (* NUMBER ⟨variable⟩ )
+		if isToken(l.Cdar(), "begingroup") { // grouping
+			n := l.Length()                                // variable list of statements!
+			opAtom := terex.Atomize(wrapOpToken(l.Cdar())) // closure pseudo operator
+			expr := l.Nth(n - 1)                           // collect closure result
+			stmts := l.Cddr().FirstN(n - 4)                // collect closure statements
+			stmtop := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "statements")))
+			stmts = stmts.Push(terex.Atomize(stmtop)) // prepend statements-pseudo-op
+			l = terex.List(opAtom, stmts, expr)       // return closure node
+			return terex.Elem(l)
+		}
+		if tokenArg(l) { // Unsigned ⟨variable⟩ ⇒ (* Unsigned ⟨variable⟩ )
 			// invent an ad-hoc multiplication token
 			op := wrapOpToken(terex.Atomize(makeLMToken("PrimaryOp", "*")))
 			prefix := convertTerminalToken(terex.Elem(l.Cdar()), env)
