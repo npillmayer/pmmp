@@ -49,6 +49,7 @@ import (
 
 // Token values for operators on different grammar levels
 const (
+	SymTok          int = -9
 	Unsigned        int = -10
 	Signed          int = -11
 	UnaryOp         int = -15
@@ -65,14 +66,15 @@ const (
 	PseudoOp        int = -26
 	Function        int = -27
 	Join            int = -28
-	Keyword         int = -30
+	DrawCmd         int = -29
+	DrawOption      int = -30
+	Keyword         int = -32
 )
 
 // The tokens representing literal one-char lexemes
 var literals = []string{
 	";", "(", ")", "[", "]", "{", "}", ",", "=",
 }
-
 var types = []string{
 	"boolean", "cmycolor", "color", "numeric", "pair", "path", "pen",
 	"picture", "rgbcolor", "string", "transform",
@@ -111,15 +113,27 @@ var funcs = []string{
 var join = []string{
 	`--`, `\.\.`, `\.\.\.`, `---`,
 }
+var drawcmd = []string{
+	"draw", "fill", "filldraw", "undraw", "unfill", "unfilldraw",
+	"drawarrow", "drawdblarrow", "cutdraw",
+}
+var drawopt = []string{
+	"withcolor", "withrgbcolor", "withcmykcolor",
+	"withgreyscale", "withpen", "dashed",
+}
 
 // The keyword tokens
 var keywords = []string{ // TODO
 	"of",
 	`\[\]`,
 	"begingroup", "endgroup",
-	"def", "vardef",
 	"picture", "end",
 	"tension", "and", "controls", "curl",
+	"pickup", "save", "show",
+	"def", "vardef", "enddef", "XXX",
+	"expr", "suffix",
+	"primary", "secondary", "tertiary",
+	"primarydef", "secondarydef", "tertiarydef",
 }
 
 // All of the tokens (including literals and keywords)
@@ -141,6 +155,7 @@ func initTokens() {
 		tokenIds["NUMBER"] = scanner.Float
 		tokenIds["Signed"] = Signed
 		tokenIds["Unsigned"] = Unsigned
+		tokenIds["SymTok"] = SymTok
 		tokenIds["NullaryOp"] = NullaryOp
 		tokenIds["UnaryOp"] = UnaryOp
 		tokenIds["PrimaryOp"] = PrimaryOp
@@ -154,6 +169,8 @@ func initTokens() {
 		tokenIds["Type"] = Type
 		tokenIds["Function"] = Function
 		tokenIds["Join"] = Join
+		tokenIds["DrawCmd"] = DrawCmd
+		tokenIds["DrawOption"] = DrawOption
 		tokenIds["Keyword"] = Keyword
 		tokenIds["PseudoOp"] = PseudoOp
 		for _, lit := range literals {
@@ -196,6 +213,12 @@ func initTokens() {
 		for _, f := range funcs {
 			tokenIds[f] = Function
 		}
+		for _, d := range drawcmd {
+			tokenIds[d] = DrawCmd
+		}
+		for _, d := range drawopt {
+			tokenIds[d] = DrawOption
+		}
 		for _, j := range join {
 			tokenIds[j] = Join
 			tokenIds[unescape(j)] = Join
@@ -228,6 +251,7 @@ func Lexer() (*scanner.LMAdapter, error) {
 		lexer.Add([]byte(`\d+(/\d+)?`), makeToken("Unsigned"))  // fraction
 		lexer.Add([]byte(`([a-zA-Z']|')+`), makeSymbol())
 		lexer.Add([]byte(`([a-zA-Z'])+(\.([a-zA-Z'])+)+`), makeSymbol())
+		lexer.Add([]byte(`[#&@$]+`), makeToken("SymTok"))
 		lexer.Add([]byte(`( |\t|\n|\r)+`), scanner.Skip) // skip whitespace
 	}
 	alltoks := append(nullOps, unaryOps...)
@@ -241,6 +265,7 @@ func Lexer() (*scanner.LMAdapter, error) {
 	alltoks = append(alltoks, types...)
 	alltoks = append(alltoks, sign...)
 	alltoks = append(alltoks, funcs...)
+	alltoks = append(alltoks, drawcmd...)
 	alltoks = append(alltoks, join...)
 	alltoks = append(alltoks, keywords...)
 	T().Debugf("all keywords: %v", alltoks)

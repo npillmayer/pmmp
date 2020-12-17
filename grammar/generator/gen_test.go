@@ -17,7 +17,7 @@ var G bytes.Buffer
 
 func TestGen(t *testing.T) {
 	G = bytes.Buffer{}
-	scanner, file := scannerFor("metapost-grammar.txt")
+	scanner, file := scannerFor("pmmp-grammar.txt")
 	defer file.Close()
 	out, gofile := makeOutputFile("G.txt")
 	defer gofile.Close()

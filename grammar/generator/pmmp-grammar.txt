@@ -1,0 +1,209 @@
+⟨S⟩ → ⟨statement list⟩
+
+⟨statement list⟩ → ⟨empty⟩ 
+	| ⟨statement⟩ ; ⟨statement list⟩ 
+
+⟨statement⟩ → ⟨empty⟩ 
+	| ⟨equation⟩ 
+	| ⟨assignment⟩ 
+	| ⟨declaration⟩ 
+	| ⟨command⟩ 
+	| ⟨macro definition⟩ 
+	| ⟨object definition⟩ 
+	| ⟨if statement⟩ 
+	| ⟨loop statement⟩ 
+
+⟨if statement⟩ → if ⟨boolean expression⟩ : ⟨statement list⟩  ⟨alternatives⟩ fi
+
+⟨alternatives⟩ → ⟨empty⟩ 
+	| else: ⟨statement list⟩ 
+	| elseif ⟨boolean expression⟩ : ⟨statement list⟩  ⟨alternatives⟩ 
+
+⟨loop⟩ → ⟨loop header⟩ : ⟨statement list⟩ endfor
+
+⟨loop header⟩ → for ⟨symbolic token⟩ = ⟨progression⟩ 
+	| for ⟨symbolic token⟩ = ⟨for list⟩ 
+#	| for ⟨symbolic token⟩ within ⟨picture expression⟩ 
+	| forsuffixes ⟨symbolic token⟩ = ⟨suffix list⟩ 
+	| forever
+
+⟨progression⟩ → ⟨tertiary⟩ upto ⟨tertiary⟩ 
+	| ⟨tertiary⟩ downto ⟨tertiary⟩ 
+	| ⟨tertiary⟩ step ⟨tertiary⟩ until ⟨tertiary⟩ 
+
+⟨for list⟩ → ⟨tertiary⟩ 
+	| ⟨for list⟩ , ⟨tertiary⟩ 
+
+⟨suffix list⟩ → ⟨suffix⟩ 
+	| ⟨suffix list⟩ , ⟨suffix⟩ 
+
+// --- Expressions -----------------------------------------------------------
+
+⟨boolean expression⟩ → ⟨tertiary⟩  RelationOp  ⟨tertiary⟩ 
+
+⟨tertiary list⟩ → ⟨tertiary⟩ 
+	| ⟨tertiary list⟩ , ⟨tertiary⟩ 
+
+⟨tertiary⟩ → ⟨secondary⟩ 
+	| ⟨tertiary⟩  SecondaryOp  ⟨secondary⟩ 
+	| ⟨tertiary⟩  PlusOrMinus  ⟨secondary⟩ 
+
+⟨secondary⟩ → ⟨primary⟩ 
+	| ⟨secondary⟩  PrimaryOp  ⟨primary⟩ 
+	| ⟨secondary⟩  ⟨transformer⟩ 
+
+⟨primary⟩ → ⟨atom⟩ 
+	| ( ⟨tertiary⟩ , ⟨tertiary⟩ )
+	| UnaryOp  ⟨primary⟩ 
+	| PlusOrMinus  ⟨primary⟩ 
+	| OfOp  ⟨tertiary⟩ of ⟨primary⟩ 
+	| ⟨atom⟩ [ ⟨tertiary⟩ , ⟨tertiary⟩ ]
+	| ⟨conditional primary⟩
+
+⟨atom⟩ → ⟨variable⟩ 
+#	| Signed ⟨variable⟩ 
+	| Unsigned ⟨variable⟩ 
+#	| Signed
+	| Unsigned
+	| NullaryOp
+	| begingroup ⟨statement list⟩  ⟨tertiary⟩ endgroup
+	| ⟨function call⟩
+	| ( ⟨tertiary⟩ )
+
+⟨transformer⟩ → UnaryTransform ⟨primary⟩ 
+	| BinaryTransform ( ⟨tertiary⟩ , ⟨tertiary⟩ )
+
+⟨conditional primary⟩ → if ⟨boolean expression⟩ : ⟨primary⟩  ⟨primary alternatives⟩ fi
+
+⟨primary alternatives⟩ → ⟨empty⟩ 
+	| else: ⟨primary⟩ 
+	| elseif ⟨boolean expression⟩ : ⟨primary⟩  ⟨primary alternatives⟩ 
+
+// --- Paths -----------------------------------------------------------------
+
+⟨path expression⟩ → ⟨tertiary⟩ 
+	| ⟨path expression⟩  ⟨path join⟩  ⟨path knot⟩ 
+	| ⟨path expression⟩  ⟨conditional path segment⟩
+	| ⟨path expression⟩  ⟨segment loop⟩
+
+⟨path knot⟩ → ⟨tertiary⟩ 
+
+⟨path join⟩ → --
+	| ⟨direction specifier⟩  ⟨basic path join⟩  ⟨direction specifier⟩ 
+
+⟨direction specifier⟩ → ⟨empty⟩ 
+	| { curl ⟨tertiary⟩ }
+	| { ⟨tertiary⟩ }
+	| { ⟨tertiary⟩ , ⟨tertiary⟩ }
+
+⟨basic path join⟩ → ..
+	| ...
+	| .. ⟨tension⟩ ..
+	| .. ⟨controls⟩ ..
+
+⟨tension⟩ → tension ⟨primary⟩ 
+	| tension ⟨primary⟩ and ⟨primary⟩ 
+
+⟨controls⟩ → controls ⟨primary⟩ 
+	| controls ⟨primary⟩ and ⟨primary⟩ 
+
+⟨conditional path segment⟩ → if ⟨boolean expression⟩ : ⟨path expression⟩ ⟨segment alternatives⟩ fi
+
+⟨segment alternatives⟩ → ⟨empty⟩ 
+	| else: ⟨path expression⟩ 
+	| elseif ⟨boolean expression⟩ : ⟨path expression⟩ ⟨segment alternatives⟩ 
+
+⟨segment loop⟩ → ⟨loop header⟩ : ⟨path expression⟩ endfor
+
+// --- Function calls --------------------------------------------------------
+
+⟨function call⟩ → Function ( ⟨tertiary list⟩ )
+
+⟨variable⟩ → TAG ⟨suffix⟩ 
+
+⟨suffix⟩ → ⟨empty⟩ 
+	| ⟨suffix⟩ ⟨subscript⟩ 
+	| ⟨suffix⟩ TAG 
+
+⟨subscript⟩ → Unsigned 
+	| [ ⟨tertiary⟩ ]
+
+// --- Equations -------------------------------------------------------------
+
+⟨equation⟩ → ⟨tertiary⟩ = ⟨right hand side⟩ 
+
+⟨assignment⟩ → ⟨variable⟩ := ⟨right hand side⟩ 
+
+⟨right hand side⟩ → ⟨tertiary⟩ 
+	| ⟨equation⟩ 
+	| ⟨assignment⟩ 
+
+// --- Declarations ----------------------------------------------------------
+
+⟨declaration⟩ → Type  ⟨declaration list⟩ 
+
+⟨declaration list⟩ → ⟨generic variable⟩ 
+	| ⟨declaration list⟩ , ⟨generic variable⟩ 
+
+⟨generic variable⟩ → TAG  ⟨generic suffix⟩ 
+
+⟨generic suffix⟩ → ⟨empty⟩ 
+	| ⟨generic suffix⟩  TAG
+	| ⟨generic suffix⟩ []
+
+# --- Commands --------------------------------------------------------------
+
+⟨command⟩ → pickup ⟨primary⟩ 
+	| save ⟨symbolic token list⟩ 
+	| ⟨drawing command⟩ 
+	| ⟨show command⟩ 
+
+⟨show command⟩ → show ⟨tertiary⟩ 
+
+⟨symbolic token list⟩ → TAG
+	| SymTok
+	| TAG , ⟨symbolic token list⟩
+	| SymTok , ⟨symbolic token list⟩
+
+⟨drawing command⟩ → DrawCmd ⟨path expression⟩  ⟨option list⟩ 
+
+⟨option list⟩ → ⟨empty⟩ 
+	| ⟨drawing option⟩  ⟨option list⟩ 
+
+⟨drawing option⟩ → DrawOption ⟨tertiary⟩ 
+
+# --- Macros ----------------------------------------------------------------
+
+⟨macro definition⟩ → def⟨parameter⟩ =
+
+⟨object definition⟩ → ⟨macro heading⟩ = ⟨replacement text⟩ enddef
+
+⟨replacement text⟩ → ⟨statement list⟩  ⟨tertiary⟩
+
+⟨macro heading⟩ → def ⟨parameter⟩ ⟨delimited part⟩ ⟨undelimited part⟩ 
+	| vardef ⟨generic variable⟩  ⟨delimited part⟩  ⟨undelimited part⟩ 
+	| vardef ⟨generic variable⟩ SymTok ⟨delimited part⟩  ⟨undelimited part⟩ 
+	| ⟨binary def⟩  ⟨parameter⟩  TAG  ⟨parameter⟩
+#	| vardef ⟨generic variable⟩ @# ⟨delimited part⟩  ⟨undelimited part⟩ 
+
+⟨delimited part⟩ → ⟨empty⟩ 
+	| ⟨delimited part⟩ ( ⟨parameter type⟩  ⟨symbolic token list⟩ )
+
+⟨undelimited part⟩ → ⟨empty⟩ 
+	| ⟨parameter type⟩  ⟨parameter⟩
+	| ⟨precedence level⟩  ⟨parameter⟩
+	| expr SymTok of ⟨parameter⟩
+
+⟨precedence level⟩ → primary
+	| secondary
+	| tertiary
+
+⟨binary def⟩ → primarydef
+	| secondarydef
+	| tertiarydef
+
+⟨parameter type⟩ → expr
+	| suffix
+
+⟨parameter⟩ → TAG
+	| SymTok

@@ -1,104 +1,3 @@
-⟨S⟩ → ⟨statement list⟩
-
-⟨statement list⟩ → ⟨empty⟩ 
-	| ⟨statement⟩ ; ⟨statement list⟩ 
-
-⟨statement⟩ → ⟨empty⟩ 
-	| ⟨equation⟩ 
-	| ⟨assignment⟩ 
-	| ⟨declaration⟩ 
-	| ⟨path expression⟩ 
-
-⟨boolean expression⟩ → ⟨tertiary⟩  RelationOp  ⟨tertiary⟩ 
-
-⟨tertiary list⟩ → ⟨tertiary⟩ 
-	| ⟨tertiary list⟩ , ⟨tertiary⟩ 
-
-⟨tertiary⟩ → ⟨secondary⟩ 
-	| ⟨tertiary⟩  SecondaryOp  ⟨secondary⟩ 
-	| ⟨tertiary⟩  PlusOrMinus  ⟨secondary⟩ 
-
-⟨secondary⟩ → ⟨primary⟩ 
-	| ⟨secondary⟩  PrimaryOp  ⟨primary⟩ 
-	| ⟨secondary⟩  ⟨transformer⟩ 
-
-⟨primary⟩ → ⟨atom⟩ 
-	| ( ⟨tertiary⟩ , ⟨tertiary⟩ )
-	| UnaryOp  ⟨primary⟩ 
-	| PlusOrMinus  ⟨primary⟩ 
-	| OfOp  ⟨tertiary⟩ of ⟨primary⟩ 
-	| ⟨atom⟩ [ ⟨tertiary⟩ , ⟨tertiary⟩ ]
-
-⟨atom⟩ → ⟨variable⟩ 
-#	| Signed ⟨variable⟩ 
-	| Unsigned ⟨variable⟩ 
-#	| Signed
-	| Unsigned
-	| NullaryOp
-	| begingroup ⟨statement list⟩  ⟨tertiary⟩ endgroup
-	| ⟨function call⟩
-	| ( ⟨tertiary⟩ )
-
-⟨transformer⟩ → UnaryTransform ⟨primary⟩ 
-	| BinaryTransform ( ⟨tertiary⟩ , ⟨tertiary⟩ )
-
-⟨path expression⟩ → ⟨tertiary⟩ 
-	| ⟨path expression⟩  ⟨path join⟩  ⟨path knot⟩ 
-
-⟨path knot⟩ → ⟨tertiary⟩ 
-
-⟨path join⟩ → --
-	| ⟨direction specifier⟩  ⟨basic path join⟩  ⟨direction specifier⟩ 
-
-⟨direction specifier⟩ → ⟨empty⟩ 
-	| { curl ⟨tertiary⟩ }
-	| { ⟨tertiary⟩ }
-	| { ⟨tertiary⟩ , ⟨tertiary⟩ }
-
-⟨basic path join⟩ → ..
-	| ...
-	| .. ⟨tension⟩ ..
-	| .. ⟨controls⟩ ..
-
-⟨tension⟩ → tension ⟨primary⟩ 
-	| tension ⟨primary⟩ and ⟨primary⟩ 
-
-⟨controls⟩ → controls ⟨primary⟩ 
-	| controls ⟨primary⟩ and ⟨primary⟩ 
-
-⟨function call⟩ → Function ( ⟨tertiary list⟩ )
-
-⟨variable⟩ → TAG ⟨suffix⟩ 
-
-⟨suffix⟩ → ⟨empty⟩ 
-	| ⟨suffix⟩ ⟨subscript⟩ 
-	| ⟨suffix⟩ TAG 
-
-⟨subscript⟩ → Unsigned 
-	| [ ⟨tertiary⟩ ]
-
-⟨equation⟩ → ⟨tertiary⟩ = ⟨right hand side⟩ 
-
-⟨assignment⟩ → ⟨variable⟩ := ⟨right hand side⟩ 
-
-⟨right hand side⟩ → ⟨tertiary⟩ 
-	| ⟨equation⟩ 
-	| ⟨assignment⟩ 
-
-⟨declaration⟩ → Type  ⟨declaration list⟩ 
-
-⟨declaration list⟩ → ⟨generic variable⟩ 
-	| ⟨declaration list⟩ , ⟨generic variable⟩ 
-
-⟨generic variable⟩ → TAG  ⟨generic suffix⟩ 
-
-⟨generic suffix⟩ → ⟨empty⟩ 
-	| ⟨generic suffix⟩  TAG
-	| ⟨generic suffix⟩ []
-
-
-STOP -----------------------------------------------
-
 
 ⟨atom⟩ → ⟨variable⟩ 
 	| ⟨argument⟩ 
@@ -359,7 +258,7 @@ STOP -----------------------------------------------
 	| warningcheck
 	| vppp
 	| year
-	| ⟨symbolic token defined bynewinternal⟩ 
+	| ⟨symbolic token defined by newinternal⟩ 
 
 ⟨pseudo function⟩ → min( ⟨expression list⟩ )
 	| max( ⟨expression list⟩ )
@@ -537,7 +436,9 @@ STOP -----------------------------------------------
 	| showdependencies
 
 ⟨symbolic token list⟩ → ⟨symbolic token⟩ 
-	| ⟨symbolic token⟩ , ⟨symbolic token list⟩  ⟨expression list⟩ → ⟨expression⟩ 
+	| ⟨symbolic token⟩ , ⟨symbolic token list⟩
+
+⟨expression list⟩ → ⟨expression⟩ 
 	| ⟨expression list⟩ , ⟨expression⟩ 
 
 ⟨addto command⟩ → addto ⟨picture variable⟩ also ⟨picture expression⟩  ⟨option list⟩ 

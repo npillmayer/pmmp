@@ -17,7 +17,7 @@ func TestScanner(t *testing.T) {
 	if err != nil {
 		t.Errorf(err.Error())
 	}
-	input := `begingroup boolean 1 "hello" a.l 1/23 ** ... ; % ignored`
+	input := `begingroup @# boolean 1 "hello" a.l 1/23 ** ... ; % ignored`
 	scan, err := lex.Scanner(input)
 	if err != nil {
 		t.Errorf(err.Error())
@@ -36,7 +36,7 @@ func TestScanner(t *testing.T) {
 			cnt++
 		}
 	}
-	if cnt != 9 {
-		t.Errorf("Expected input to be split into 9 tokens, got %d", cnt)
+	if cnt != 10 {
+		t.Errorf("Expected input to be split into 10 tokens, got %d", cnt)
 	}
 }

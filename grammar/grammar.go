@@ -63,7 +63,8 @@ func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 	b.LHS("statement").N("equation").End()
 	b.LHS("statement").N("assignment").End()
 	b.LHS("statement").N("declaration").End()
-	b.LHS("statement").N("path_expression").End()
+	b.LHS("statement").N("command").End()
+	b.LHS("statement").N("macro_definition").End()
 	b.LHS("boolean_expression").N("tertiary").T(S("RelationOp")).N("tertiary").End()
 	b.LHS("tertiary_list").N("tertiary").End()
 	b.LHS("tertiary_list").N("tertiary_list").T(",", 44).N("tertiary").End()
@@ -124,6 +125,41 @@ func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 	b.LHS("generic_suffix").Epsilon()
 	b.LHS("generic_suffix").N("generic_suffix").T(S("TAG")).End()
 	b.LHS("generic_suffix").N("generic_suffix").T(S("[]")).End()
+	b.LHS("command").T(S("pickup")).N("primary").End()
+	b.LHS("command").T(S("save")).N("symbolic_token_list").End()
+	b.LHS("command").N("drawing_command").End()
+	b.LHS("command").N("show_command").End()
+	b.LHS("show_command").T(S("show")).N("tertiary").End()
+	b.LHS("symbolic_token_list").T(S("TAG")).End()
+	b.LHS("symbolic_token_list").T(S("SymTok")).End()
+	b.LHS("symbolic_token_list").T(S("TAG")).T(",", 44).N("symbolic_token_list").End()
+	b.LHS("symbolic_token_list").T(S("SymTok")).T(",", 44).N("symbolic_token_list").End()
+	b.LHS("drawing_command").T(S("DrawCmd")).N("path_expression").N("option_list").End()
+	b.LHS("option_list").Epsilon()
+	b.LHS("option_list").N("drawing_option").N("option_list").End()
+	b.LHS("drawing_option").T(S("DrawOption")).N("tertiary").End()
+	b.LHS("macro_definition").N("macro_heading").T("=", 61).N("replacement_text").T(S("enddef")).End()
+	b.LHS("replacement_text").T(S("XXX")).End()
+	b.LHS("macro_heading").T(S("def")).N("parameter").N("delimited_part").N("undelimited_part").End()
+	b.LHS("macro_heading").T(S("vardef")).N("generic_variable").N("delimited_part").N("undelimited_part").End()
+	b.LHS("macro_heading").T(S("vardef")).N("generic_variable").T(S("SymTok")).N("delimited_part").N("undelimited_part").End()
+	b.LHS("macro_heading").N("binary_def").N("parameter").T(S("TAG")).N("parameter").End()
+	b.LHS("delimited_part").Epsilon()
+	b.LHS("delimited_part").N("delimited_part").T("(", 40).N("parameter_type").N("symbolic_token_list").T(")", 41).End()
+	b.LHS("undelimited_part").Epsilon()
+	b.LHS("undelimited_part").N("parameter_type").N("parameter").End()
+	b.LHS("undelimited_part").N("precedence_level").N("parameter").End()
+	b.LHS("undelimited_part").T(S("expr")).T(S("SymTok")).T(S("of")).N("parameter").End()
+	b.LHS("precedence_level").T(S("primary")).End()
+	b.LHS("precedence_level").T(S("secondary")).End()
+	b.LHS("precedence_level").T(S("tertiary")).End()
+	b.LHS("binary_def").T(S("primarydef")).End()
+	b.LHS("binary_def").T(S("secondarydef")).End()
+	b.LHS("binary_def").T(S("tertiarydef")).End()
+	b.LHS("parameter_type").T(S("expr")).End()
+	b.LHS("parameter_type").T(S("suffix")).End()
+	b.LHS("parameter").T(S("TAG")).End()
+	b.LHS("parameter").T(S("SymTok")).End()
 
 	g, err := b.Grammar()
 	if err != nil {
@@ -232,6 +268,8 @@ func newASTBuilder(grammar *lr.Grammar) *termr.ASTBuilder {
 	ab.AddTermR(dirOp)
 	ab.AddTermR(joinOp)
 	ab.AddTermR(pathExprOp)
+	ab.AddTermR(commandOp)
+	ab.AddTermR(drawOptOp)
 	return ab
 }
 
@@ -281,7 +319,7 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 			return el
 		}
 		t.Value = tags
-		T().Debugf("TAG = %v", t.Value)
+		T().Infof("TAG = %v  ⇒ %v", t.Value, t)
 	default:
 		t.Value = string(token.Lexeme)
 	}

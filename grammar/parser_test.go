@@ -58,15 +58,19 @@ func TestParseList(t *testing.T) {
 	// parse("a * xpart z", false, t)
 	// parse("x.r' < -1/4", false, t)
 
-	parse("numeric p;", false, t)
-	parse("pair p[];", false, t)
-	parse("a=1;", false, t)
-	parse("a=b=5;", false, t)
-	parse("b = a shifted (1,2)", false, t)
-	parse("pair p; p = q;", false, t)
-	parse("..tension 1.2..;", false, t)
-	parse("a = begingroup 5 endgroup;", false, t)
-	parse("a = begingroup numeric a; 5 endgroup;", false, t)
+	// parse("numeric p;", false, t)
+	// parse("pair p[];", false, t)
+	// parse("a=1;", false, t)
+	// parse("a=b=5;", false, t)
+	// parse("b = a shifted (1,2)", false, t)
+	// parse("pair p; p = q;", false, t)
+	// parse("..tension 1.2..;", false, t)
+	// parse("a = begingroup 5 endgroup;", false, t)
+	// parse("a = begingroup numeric a; 5 endgroup;", false, t)
+	// parse("save a, @$;", false, t)
+
+	//parse("def a = XXX enddef;", true, t)
+	parse("def a(expr x) = XXX enddef;", true, t)
 }
 
 func TestVariableAST1(t *testing.T) {
@@ -239,11 +243,27 @@ func TestPathExpression(t *testing.T) {
 	compile("z1{curl 1}..controls (1,2)..z2--z3;", t)
 }
 
-func TestPathGroup(t *testing.T) {
+func TestGroup(t *testing.T) {
 	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
 	compile("a = begingroup numeric a; 5 endgroup;", t)
+}
+
+func TestCommand(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("save a.r, @$; pickup pencircle; show a;", t)
+	t.Fail()
+}
+
+func TestDraw(t *testing.T) {
+	gtrace.SyntaxTracer = gotestingadapter.New()
+	teardown := gotestingadapter.RedirectTracing(t)
+	defer teardown()
+	compile("draw a.r withcolor white withpen pensquare;", t)
+	t.Fail()
 }
 
 // ---------------------------------------------------------------------------

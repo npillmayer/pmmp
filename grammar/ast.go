@@ -78,6 +78,8 @@ var controlsOp *mpTermR     // for controls -> … productions
 var dirOp *mpTermR          // for direction_specifier -> … productions
 var joinOp *mpTermR         // for path_join -> … productions
 var pathExprOp *mpTermR     // for path_expression -> … productions
+var commandOp *mpTermR      // for command -> … productions
+var drawOptOp *mpTermR      // for drawing_option -> … productions
 
 func initRewriters() {
 	atomOp = makeASTTermR("atom", "atom")
@@ -483,6 +485,56 @@ func initRewriters() {
 		}
 		return terex.Elem(l)
 	}
+	commandOp = makeASTTermR("command", "command")
+	commandOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨command⟩ → pickup ⟨primary⟩
+		//     | save ⟨symbolic token list⟩
+		//     | ⟨drawing command⟩
+		//     | ⟨show command⟩
+		if isToken(l.Cdar(), "save") {
+			opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+			symtoks := l.Cddr()
+			comma := ","
+			symtoks = symtoks.Drop(func(a terex.Atom) bool {
+				convertTerminalToken(terex.Elem(a), env)
+				return isToken(a, comma)
+			})
+			x := symtoks
+			for x != nil {
+				t, ok := x.Car.Data.(*terex.Token)
+				if ok { //isToken(x.Car, "TAG") {
+					if _, ok = t.Value.([]string); ok {
+						//panic("OK")
+						suffixes := makeTagSuffixes(terex.Elem(t), env)
+						p := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "TAG")))
+						suffixes = suffixes.Push(terex.Atomize(p))
+						x.Car = terex.Atomize(suffixes)
+					}
+				}
+				x = x.Cdr
+			}
+			l = terex.Cons(opAtom, symtoks)
+		} else if isToken(l.Cdar(), "pickup") {
+			opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+			l = terex.Cons(opAtom, l.Cddr())
+		} else if isToken(l.Cdar(), "show") {
+			opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+			l = terex.Cons(opAtom, l.Cddr())
+		} else if isToken(l.Cdar(), "DrawCmd") {
+			opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+			return terex.Elem(terex.Cons(opAtom, l.Cddr()))
+		} else {
+			panic("unknown command, not yet implemented")
+		}
+		return terex.Elem(l)
+	}
+	drawOptOp = makeASTTermR("drawing_option", "drawopt")
+	drawOptOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
+		// ⟨drawing option⟩ → DrawOption ⟨tertiary⟩
+		opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
+		l = terex.Cons(opAtom, l.Cddr())
+		return terex.Elem(l)
+	}
 }
 
 func equation(op terex.Operator, l *terex.GCons) *terex.GCons {
@@ -563,7 +615,7 @@ func isSubAST(a terex.Atom, opname string) bool {
 }
 
 func isToken(a terex.Atom, tcat string) bool {
-	T().Errorf("isToken: %v", terex.Elem(a).AsList().Car)
+	T().Errorf("isToken: %v (%v)", terex.Elem(a).AsList().Car, a.Type())
 	if a.Type() == terex.OperatorType {
 		o := a.Data.(terex.Operator)
 		//T().Errorf("o = %v", o)
