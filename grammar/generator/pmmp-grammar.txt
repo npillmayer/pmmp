@@ -9,7 +9,7 @@
 	| ⟨declaration⟩ 
 	| ⟨command⟩ 
 	| ⟨macro definition⟩ 
-	| ⟨object definition⟩ 
+#	| ⟨object definition⟩ TODO
 	| ⟨if statement⟩ 
 	| ⟨loop statement⟩ 
 
