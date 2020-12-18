@@ -9,6 +9,7 @@
 	| ⟨declaration⟩ 
 	| ⟨command⟩ 
 	| ⟨macro definition⟩ 
+	| ⟨function definition⟩ 
 #	| ⟨object definition⟩ TODO
 	| ⟨if statement⟩ 
 	| ⟨loop statement⟩ 
@@ -59,6 +60,7 @@
 	| OfOp  ⟨tertiary⟩ of ⟨primary⟩ 
 	| ⟨atom⟩ [ ⟨tertiary⟩ , ⟨tertiary⟩ ]
 	| ⟨conditional primary⟩
+# conditional primary should be conditional tertiary, similar to begingroup ?
 
 ⟨atom⟩ → ⟨variable⟩ 
 #	| Signed ⟨variable⟩ 
@@ -69,6 +71,7 @@
 	| begingroup ⟨statement list⟩  ⟨tertiary⟩ endgroup
 	| ⟨function call⟩
 	| ( ⟨tertiary⟩ )
+#	| new TAG     TODO
 
 ⟨transformer⟩ → UnaryTransform ⟨primary⟩ 
 	| BinaryTransform ( ⟨tertiary⟩ , ⟨tertiary⟩ )
@@ -175,12 +178,13 @@
 # --- Macros ----------------------------------------------------------------
 
 ⟨macro definition⟩ → def⟨parameter⟩ =
+# rest will be done by scanner
 
-⟨object definition⟩ → ⟨macro heading⟩ = ⟨replacement text⟩ enddef
+⟨function definition⟩ → ⟨function heading⟩ = ⟨replacement text⟩ enddef
 
 ⟨replacement text⟩ → ⟨statement list⟩  ⟨tertiary⟩
 
-⟨macro heading⟩ → def ⟨parameter⟩ ⟨delimited part⟩ ⟨undelimited part⟩ 
+⟨function heading⟩ → def ⟨parameter⟩ ⟨delimited part⟩ ⟨undelimited part⟩ 
 	| vardef ⟨generic variable⟩  ⟨delimited part⟩  ⟨undelimited part⟩ 
 	| vardef ⟨generic variable⟩ SymTok ⟨delimited part⟩  ⟨undelimited part⟩ 
 	| ⟨binary def⟩  ⟨parameter⟩  TAG  ⟨parameter⟩
