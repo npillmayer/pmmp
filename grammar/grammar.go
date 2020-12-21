@@ -172,7 +172,7 @@ func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 }
 
 // Parse parses an input string, given in TeREx language format. It returns the
-// parse forest and a TokenReceiver, or an error in case of failure.
+// parse forest and a TokenRetriever, or an error in case of failure.
 //
 // Clients may use a terex.ASTBuilder to create an abstract syntax tree
 // from the parse forest.
