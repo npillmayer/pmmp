@@ -3,7 +3,7 @@ module github.com/npillmayer/pmmp
 go 1.16
 
 require (
-	github.com/npillmayer/arithm v0.0.0-20201205232234-0c0b84ed8d47
+	github.com/npillmayer/arithm v0.1.0
 	github.com/npillmayer/gorgo v0.0.0-20201207200446-92828a069d17
 	github.com/npillmayer/schuko v0.1.0
 	github.com/timtadh/lexmachine v0.2.2
