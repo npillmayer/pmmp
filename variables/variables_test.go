@@ -21,10 +21,9 @@ func TestVarDecl1(t *testing.T) {
 }
 
 func TestVarDecl2(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	symtab := runtime.NewSymbolTable()
 	x := variables.NewVarDecl("x", pmmp.NumericType)
 	symtab.InsertTag(x.AsTag())
@@ -32,10 +31,9 @@ func TestVarDecl2(t *testing.T) {
 }
 
 func TestVarDecl3(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	x := variables.NewVarDecl("x", pmmp.NumericType)
 	r := variables.CreateSuffix("r", pmmp.SuffixType, x.AsSuffix())
 	arr := variables.CreateSuffix("<array>", pmmp.SubscriptType, r)
@@ -43,10 +41,9 @@ func TestVarDecl3(t *testing.T) {
 }
 
 func TestVarDecl4(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	x := variables.NewVarDecl("x", pmmp.NumericType)
 	r := variables.CreateSuffix("r", pmmp.SuffixType, x.AsSuffix())
 	r2 := variables.CreateSuffix("r", pmmp.SuffixType, x.AsSuffix())
@@ -67,10 +64,9 @@ func TestVarDecl4(t *testing.T) {
 // }
 
 func TestVarRef2(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	// build x.r=1
 	x := variables.NewVarDecl("x", pmmp.NumericType)
 	r := variables.CreateSuffix("r", pmmp.SuffixType, x.AsSuffix())
@@ -79,10 +75,9 @@ func TestVarRef2(t *testing.T) {
 }
 
 func TestVarRef3(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	// build x[7]=1
 	x := variables.NewVarDecl("x", pmmp.NumericType)
 	arr := variables.CreateSuffix("<[]>", pmmp.SubscriptType, x.AsSuffix())

@@ -27,11 +27,11 @@ var mpLexer *scanner.LMAdapter
 func initGrammar() {
 	startOnce.Do(func() {
 		var err error
-		T().Infof("Creating lexer")
+		tracer().Infof("Creating lexer")
 		if mpLexer, err = Lexer(); err != nil { // MUST be called before grammar builing !
 			panic("Cannot create lexer")
 		}
-		T().Infof("Creating grammar")
+		tracer().Infof("Creating grammar")
 		if mpGrammar, err = MakeMetaPostGrammar(); err != nil {
 			panic("Cannot create global grammar")
 		}
@@ -163,7 +163,7 @@ func MakeMetaPostGrammar() (*lr.LRAnalysis, error) {
 
 	g, err := b.Grammar()
 	if err != nil {
-		T().Errorf("Error creating MetaPost grammar")
+		tracer().Errorf("Error creating MetaPost grammar")
 		return nil, err
 	}
 	g.Dump()
@@ -209,11 +209,11 @@ func AST(parsetree *sppf.Forest, tokRetr termr.TokenRetriever) (*terex.GCons,
 	ab := newASTBuilder(mpGrammar.Grammar())
 	env := ab.AST(parsetree, tokRetr)
 	if env == nil {
-		T().Errorf("Cannot create AST from parsetree")
+		tracer().Errorf("Cannot create AST from parsetree")
 		return nil, nil, fmt.Errorf("Error while creating AST")
 	}
 	ast := env.AST
-	T().Infof("AST: %s", env.AST.ListString())
+	tracer().Infof("AST: %s", env.AST.ListString())
 	return ast, env, nil
 }
 
@@ -227,18 +227,18 @@ func AST(parsetree *sppf.Forest, tokRetr termr.TokenRetriever) (*terex.GCons,
 // simply call Quote(…) for the global environment.
 //
 // func QuoteAST(ast terex.Element, env *terex.Environment) (terex.Element, error) {
-// 	// ast *terex.GCons
-// 	if env == nil {
-// 		env = terex.GlobalEnvironment
-// 	}
-// 	quEnv := terex.NewEnvironment("quoting", env)
-// 	quEnv.Defn("list", varOp.call)
-// 	//quEnv.Defn("quote", quoteOp.call)
-// 	quEnv.Resolver = symbolPreservingResolver{}
-// 	q := terex.Eval(ast, quEnv)
-// 	T().Debugf("QuotAST returns Q = %v", q)
-// 	q.Dump(tracing.LevelDebug)
-// 	return q, quEnv.LastError()
+//     // ast *terex.GCons
+//     if env == nil {
+//         env = terex.GlobalEnvironment
+//     }
+//     quEnv := terex.NewEnvironment("quoting", env)
+//     quEnv.Defn("list", varOp.call)
+//     //quEnv.Defn("quote", quoteOp.call)
+//     quEnv.Resolver = symbolPreservingResolver{}
+//     q := terex.Eval(ast, quEnv)
+//     T().Debugf("QuotAST returns Q = %v", q)
+//     q.Dump(tracing.LevelDebug)
+//     return q, quEnv.LastError()
 // }
 
 // NewASTBuilder returns a new AST builder for the MetaPost language
@@ -288,7 +288,7 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 	}
 	t := atom.Data.(*terex.Token)
 	token := t.Token.(*lexmachine.Token)
-	T().Infof("Convert terminal token: '%v'", string(token.Lexeme))
+	tracer().Infof("Convert terminal token: '%v'", string(token.Lexeme))
 	switch token.Type {
 	case tokenIds["NUMBER"]:
 		lexeme := string(token.Lexeme)
@@ -298,10 +298,10 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 			denom, _ := strconv.ParseFloat(frac[1], 64)
 			t.Value = nom / denom
 		} else if f, err := strconv.ParseFloat(string(token.Lexeme), 64); err == nil {
-			T().Debugf("   t.Value=%g", f)
+			tracer().Debugf("   t.Value=%g", f)
 			t.Value = f
 		} else {
-			T().Errorf("   %s", err.Error())
+			tracer().Errorf("   %s", err.Error())
 			return terex.Elem(terex.Atomize(err))
 		}
 	case tokenIds["STRING"]:
@@ -314,12 +314,12 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 		tag := string(token.Lexeme)
 		tags, err := splitTagName(tag)
 		if err != nil {
-			T().Errorf("illegal tag name")
+			tracer().Errorf("illegal tag name")
 			t.Value = []string{"<illegal tag>"}
 			return el
 		}
 		t.Value = tags
-		T().Infof("TAG = %v  ⇒ %v", t.Value, t)
+		tracer().Infof("TAG = %v  ⇒ %v", t.Value, t)
 	default:
 		t.Value = string(token.Lexeme)
 	}
@@ -338,16 +338,16 @@ func splitTagName(tagname string) ([]string, error) {
 // --- Operator wrapper ------------------------------------------------------
 
 // type wrapOp struct {
-// 	terminalToken *terex.Token
+//     terminalToken *terex.Token
 // }
 
 // func (w wrapOp) String() string {
-// 	// will result in "##<opname>:<op-category>"
-// 	return "#" + w.Opname() + ":" + w.terminalToken.Name
+//     // will result in "##<opname>:<op-category>"
+//     return "#" + w.Opname() + ":" + w.terminalToken.Name
 // }
 
 // func (w wrapOp) Opname() string {
-// 	return w.terminalToken.Value.(string)
+//     return w.terminalToken.Value.(string)
 // }
 
 func wrapOpToken(a terex.Atom) terex.Operator {
@@ -363,23 +363,23 @@ func wrapOpToken(a terex.Atom) terex.Operator {
 // Call delegates the operator call to a symbol in the environment.
 // The symbol is searched for with the literal value of the operator.
 // func (w wrapOp) Call(e terex.Element, env *terex.Environment) terex.Element {
-// 	return callFromEnvironment(w.Opname(), e, env)
+//     return callFromEnvironment(w.Opname(), e, env)
 // }
 
 // var _ terex.Operator = &wrapOp{}
 
 // func callFromEnvironment(opname string, e terex.Element, env *terex.Environment) terex.Element {
-// 	opsym := env.FindSymbol(opname, true)
-// 	if opsym == nil {
-// 		T().Errorf("Cannot find parsing operation %s", opname)
-// 		return e
-// 	}
-// 	operator, ok := opsym.Value.AsAtom().Data.(terex.Operator)
-// 	if !ok {
-// 		T().Errorf("Cannot call parsing operation %s", opname)
-// 		return e
-// 	}
-// 	return operator.Call(e, env)
+//     opsym := env.FindSymbol(opname, true)
+//     if opsym == nil {
+//         T().Errorf("Cannot find parsing operation %s", opname)
+//         return e
+//     }
+//     operator, ok := opsym.Value.AsAtom().Data.(terex.Operator)
+//     if !ok {
+//         T().Errorf("Cannot call parsing operation %s", opname)
+//         return e
+//     }
+//     return operator.Call(e, env)
 // }
 
 // --- Symbol resolver -------------------------------------------------------
@@ -389,19 +389,19 @@ func wrapOpToken(a terex.Atom) terex.Operator {
 // type symbolPreservingResolver struct{}
 
 // func (r symbolPreservingResolver) Resolve(atom terex.Atom, env *terex.Environment, asOp bool) (
-// 	terex.Element, error) {
-// 	if atom.Type() == terex.TokenType {
-// 		t := atom.Data.(*terex.Token)
-// 		token := t.Token.(*lexmachine.Token)
-// 		T().Debugf("Resolve terminal token: '%v'", string(token.Lexeme))
-// 		switch token.Type {
-// 		case tokenIds["NUM"]:
-// 			return terex.Elem(t.Value.(float64)), nil
-// 		case tokenIds["STRING"]:
-// 			return terex.Elem(t.Value.(string)), nil
-// 		}
-// 	}
-// 	return terex.Elem(atom), nil
+//     terex.Element, error) {
+//     if atom.Type() == terex.TokenType {
+//         t := atom.Data.(*terex.Token)
+//         token := t.Token.(*lexmachine.Token)
+//         T().Debugf("Resolve terminal token: '%v'", string(token.Lexeme))
+//         switch token.Type {
+//         case tokenIds["NUM"]:
+//             return terex.Elem(t.Value.(float64)), nil
+//         case tokenIds["STRING"]:
+//             return terex.Elem(t.Value.(string)), nil
+//         }
+//     }
+//     return terex.Elem(atom), nil
 // }
 
 // var _ terex.SymbolResolver = symbolPreservingResolver{}

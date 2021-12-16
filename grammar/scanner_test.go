@@ -3,16 +3,13 @@ package grammar
 import (
 	"testing"
 
-	"github.com/npillmayer/schuko/gtrace"
-	"github.com/npillmayer/schuko/tracing"
 	"github.com/npillmayer/schuko/tracing/gotestingadapter"
 )
 
 func TestScanner(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	lex, err := Lexer()
 	if err != nil {
 		t.Errorf(err.Error())

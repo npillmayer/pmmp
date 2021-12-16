@@ -1,11 +1,10 @@
 package evaluator
 
 import (
-	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing"
 )
 
-// T traces to the global syntax tracer
-func T() tracing.Trace {
-	return gtrace.SyntaxTracer
+// tracer traces with key 'pmmp.core'.
+func tracer() tracing.Trace {
+	return tracing.Select("pmmp.core")
 }

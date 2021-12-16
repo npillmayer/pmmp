@@ -8,15 +8,12 @@ import (
 	"github.com/npillmayer/pmmp/corelang"
 	"github.com/npillmayer/pmmp/evaluator"
 	"github.com/npillmayer/schuko/gtrace"
-	"github.com/npillmayer/schuko/tracing"
 	"github.com/npillmayer/schuko/tracing/gotestingadapter"
 )
 
 func TestSetup(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
 	//
 	intp := evaluator.NewInterpreter()
 	if intp == nil {
@@ -33,10 +30,8 @@ func TestSetup(t *testing.T) {
 }
 
 func TestStart1(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
 	//
 	intp := evaluator.NewInterpreter()
 	ast := terex.Atomize(terex.Cons(wrap("+", "SecondaryOp"), nil))
@@ -48,10 +43,8 @@ func TestStart1(t *testing.T) {
 }
 
 func TestSubtraction(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
 	//
 	intp := evaluator.NewInterpreter()
 	operands := terex.Cons(num(3), terex.Cons(num(2), nil))

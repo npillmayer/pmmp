@@ -3,51 +3,26 @@ Package varparse implements functions to create variable declarations
 and references from syntax trees.
 
 
+License
 
-BSD License
+Governed by a 3-Clause BSD license. License file may be found in the root
+folder of this module.
 
-Copyright (c) 2017-21, Norbert Pillmayer
+Copyright © 2017–2021 Norbert Pillmayer <norbert@pillmayer.com>
 
-All rights reserved.
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions
-are met:
-
-1. Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright
-notice, this list of conditions and the following disclaimer in the
-documentation and/or other materials provided with the distribution.
-
-3. Neither the name of the software nor the names of its contributors
-may be used to endorse or promote products derived from this software
-without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
+*/
 package varparse
 
 import (
 	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/pmmp/variables"
-	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing"
 )
 
-// T traces to the global syntax tracer
-func T() tracing.Trace {
-	return gtrace.SyntaxTracer
+// tracer traces with key 'pmmp.grammar'.
+func tracer() tracing.Trace {
+	return tracing.Select("pmmp.grammar")
 }
 
 // === Variable Parser =======================================================
@@ -130,58 +105,58 @@ The MARKER will be ignored.
 */
 /*
 func (vl *varParseListener) ExitVariable(ctx *grammar.VariableContext) {
-	tag := ctx.Tag().GetText()
-	T().P("tag", tag).Debugf("looking for declaration for tag")
-	sym, scope := vl.scopeTree.Current().ResolveSymbol(tag)
-	if sym != nil {
-		vl.def = sym.(*variables.PMMPVarDecl) // scopes are assumed to create these
-		T().P("decl", vl.def.GetFullName()).Debugf("found %v in scope %s", vl.def, scope.GetName())
-	} else { // variable declaration for tag not found => create it
-		sym, _ = vl.scopeTree.Globals().DefineSymbol(tag)
-		vl.def = sym.(*variables.PMMPVarDecl)      // scopes are assumed to create these
-		vl.def.SetType(int(variables.NumericType)) // un-declared variables default to type numeric
-		T().P("decl", vl.def.GetName()).Debugf("created %v in global scope", vl.def)
-	} // now def declaration of <tag> is in vl.def
-	// produce declarations for suffixes, if necessary
-	it := vl.suffixes.Iterator()
-	subscrCount := 0
-	for it.Next() {
-		i, vs := it.Index(), it.Value().(varsuffix)
-		T().P("decl", vl.def.GetFullName()).Debugf("appending suffix #%d: %s", i, vs)
-		if vs.number { // subscript
-			vl.def = variables.CreatePMMPVarDecl("<array>", variables.ComplexArray, vl.def)
-			subscrCount += 1
-		} else { // tag suffix
-			vl.def = variables.CreatePMMPVarDecl(vs.text, variables.ComplexSuffix, vl.def)
-		}
-	}
-	T().P("decl", vl.def.GetFullName()).Debugf("full declared type: %v", vl.def)
-	// now create variable ref and push onto expression stack
-	var subscripts []dec.Decimal = make([]dec.Decimal, subscrCount, subscrCount+1)
-	it = vl.suffixes.Iterator()
-	for it.Next() { // extract subscripts -> array
-		_, vs2 := it.Index(), it.Value().(varsuffix)
-		if vs2.number { // subscript
-			d, _ := dec.NewFromString(vs2.text)
-			subscripts = append(subscripts, d)
-		}
-	}
-	vl.ref = variables.CreatePMMPVarRef(vl.def, nil, subscripts)
-	T().P("var", vl.ref.GetName()).Debugf("var ref %v", vl.ref)
+    tag := ctx.Tag().GetText()
+    T().P("tag", tag).Debugf("looking for declaration for tag")
+    sym, scope := vl.scopeTree.Current().ResolveSymbol(tag)
+    if sym != nil {
+        vl.def = sym.(*variables.PMMPVarDecl) // scopes are assumed to create these
+        T().P("decl", vl.def.GetFullName()).Debugf("found %v in scope %s", vl.def, scope.GetName())
+    } else { // variable declaration for tag not found => create it
+        sym, _ = vl.scopeTree.Globals().DefineSymbol(tag)
+        vl.def = sym.(*variables.PMMPVarDecl)      // scopes are assumed to create these
+        vl.def.SetType(int(variables.NumericType)) // un-declared variables default to type numeric
+        T().P("decl", vl.def.GetName()).Debugf("created %v in global scope", vl.def)
+    } // now def declaration of <tag> is in vl.def
+    // produce declarations for suffixes, if necessary
+    it := vl.suffixes.Iterator()
+    subscrCount := 0
+    for it.Next() {
+        i, vs := it.Index(), it.Value().(varsuffix)
+        T().P("decl", vl.def.GetFullName()).Debugf("appending suffix #%d: %s", i, vs)
+        if vs.number { // subscript
+            vl.def = variables.CreatePMMPVarDecl("<array>", variables.ComplexArray, vl.def)
+            subscrCount += 1
+        } else { // tag suffix
+            vl.def = variables.CreatePMMPVarDecl(vs.text, variables.ComplexSuffix, vl.def)
+        }
+    }
+    T().P("decl", vl.def.GetFullName()).Debugf("full declared type: %v", vl.def)
+    // now create variable ref and push onto expression stack
+    var subscripts []dec.Decimal = make([]dec.Decimal, subscrCount, subscrCount+1)
+    it = vl.suffixes.Iterator()
+    for it.Next() { // extract subscripts -> array
+        _, vs2 := it.Index(), it.Value().(varsuffix)
+        if vs2.number { // subscript
+            d, _ := dec.NewFromString(vs2.text)
+            subscripts = append(subscripts, d)
+        }
+    }
+    vl.ref = variables.CreatePMMPVarRef(vl.def, nil, subscripts)
+    T().P("var", vl.ref.GetName()).Debugf("var ref %v", vl.ref)
 }
 
 // Variable parsing: Collect a suffix.
 func (vl *varParseListener) ExitSuffix(ctx *grammar.SuffixContext) {
-	tag := ctx.TAG().GetText()
-	T().Debugf("suffix tag: %s", tag)
-	vl.suffixes.Add(varsuffix{tag, false})
+    tag := ctx.TAG().GetText()
+    T().Debugf("suffix tag: %s", tag)
+    vl.suffixes.Add(varsuffix{tag, false})
 }
 
 // Variable parsing: Collect a numeric subscript.
 func (vl *varParseListener) ExitSubscript(ctx *grammar.SubscriptContext) {
-	d := ctx.DECIMAL().GetText()
-	T().Debugf("subscript: %s", d)
-	vl.suffixes.Add(varsuffix{d, true})
+    d := ctx.DECIMAL().GetText()
+    T().Debugf("subscript: %s", d)
+    vl.suffixes.Add(varsuffix{d, true})
 }
 */
 // ----------------------------------------------------------------------
@@ -191,52 +166,52 @@ func (vl *varParseListener) ExitSubscript(ctx *grammar.SubscriptContext) {
 // if present. It will then construct a valid variable reference for
 // that declaration.
 type VariableResolver interface {
-	VariableName() string // full name of variable
-	VariableReference(*runtime.ScopeTree) *variables.PMMPVarRef
+    VariableName() string // full name of variable
+    VariableReference(*runtime.ScopeTree) *variables.PMMPVarRef
 }
 
 // ParseVariableName will parse a string as a variable's name and
 // return a VariableResolver.
 func ParseVariableName(v string) (VariableResolver, error) {
-	el := &varErrorListener{}
-	vtree := parseVariableFromString(v, el)
-	if el.err != nil {
-		return nil, el.err
-	}
-	return &varResolver{vtree, "", nil}, el.err
+    el := &varErrorListener{}
+    vtree := parseVariableFromString(v, el)
+    if el.err != nil {
+        return nil, el.err
+    }
+    return &varResolver{vtree, "", nil}, el.err
 }
 
 type varResolver struct {
-	ctx      antlr.RuleContext
-	fullname string // variable full name
-	varref   *variables.PMMPVarRef
+    ctx      antlr.RuleContext
+    fullname string // variable full name
+    varref   *variables.PMMPVarRef
 }
 
 func (r *varResolver) VariableReference(sc *runtime.ScopeTree) *variables.PMMPVarRef {
-	if r == nil || r.ctx == nil || sc == nil {
-		return nil
-	}
-	if r.varref == nil {
-		r.varref, r.fullname = getVarRefFromVarSyntax(r.ctx, sc)
-	}
-	return r.varref
+    if r == nil || r.ctx == nil || sc == nil {
+        return nil
+    }
+    if r.varref == nil {
+        r.varref, r.fullname = getVarRefFromVarSyntax(r.ctx, sc)
+    }
+    return r.varref
 }
 
 func (r *varResolver) VariableName() string {
-	if r.varref == nil {
-		r.VariableReference(nil) // provisional call will set fullname
-	}
-	return r.fullname
+    if r.varref == nil {
+        r.VariableReference(nil) // provisional call will set fullname
+    }
+    return r.fullname
 }
 
 type varErrorListener struct {
-	*antlr.DefaultErrorListener // use default as base class
-	err                         error
+    *antlr.DefaultErrorListener // use default as base class
+    err                         error
 }
 
 func (el *varErrorListener) SyntaxError(r antlr.Recognizer, sym interface{},
-	line, column int, msg string, e antlr.RecognitionException) {
-	//
-	el.err = fmt.Errorf("[%s|%s] %.44s", strconv.Itoa(line), strconv.Itoa(column), msg)
+    line, column int, msg string, e antlr.RecognitionException) {
+    //
+    el.err = fmt.Errorf("[%s|%s] %.44s", strconv.Itoa(line), strconv.Itoa(column), msg)
 }
 */

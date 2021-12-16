@@ -38,7 +38,7 @@ func (trew *mpTermR) Operator() terex.Operator {
 }
 
 func (trew *mpTermR) Rewrite(l *terex.GCons, env *terex.Environment) terex.Element {
-	T().Debugf("%s:trew.Rewrite[%s] called", trew.String(), l.ListString())
+	tracer().Debugf("%s:trew.Rewrite[%s] called", trew.String(), l.ListString())
 	e := trew.rewrite(l, env)
 	return e
 }
@@ -88,7 +88,7 @@ func initRewriters() {
 		//     | Unsigned ⟨variable⟩
 		//     | begingroup ⟨statement list⟩ ⟨tertiary⟩ endgroup
 		//     | ( ⟨expression⟩ )
-		T().Infof("atom tree = ")
+		tracer().Infof("atom tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) { // ⟨variable⟩
 			if keywordArg(l) { // NUMBER | NullaryOp
@@ -118,7 +118,7 @@ func initRewriters() {
 	suffixOp = makeASTTermR("suffix", "suffix")
 	suffixOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨suffix⟩ → ε | ⟨suffix⟩ ⟨subscript⟩ | ⟨suffix⟩ TAG
-		T().Debugf("suffix tree = ")
+		tracer().Debugf("suffix tree = ")
 		terex.Elem(l).Dump(tracing.LevelDebug)
 		if withoutArgs(l) {
 			return terex.Elem(nil) // ⟨suffix⟩ → ε
@@ -142,15 +142,15 @@ func initRewriters() {
 	}
 	subscrOp = makeASTTermR("subscript", "subscript")
 	subscrOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		T().Infof("subscript tree = ")
+		tracer().Infof("subscript tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) { // ⟨subscript⟩ → NUMBER
-			T().Errorf("⟨subscript⟩ → NUMBER ")
+			tracer().Errorf("⟨subscript⟩ → NUMBER ")
 			e := terex.Elem(l.Cdar())
 			e = convertTerminalToken(e, env)
 			return terex.Elem(l) // ( ⟨subscript⟩ NUMBER )
 		}
-		T().Errorf("⟨subscript⟩ → [ expr ] ")
+		tracer().Errorf("⟨subscript⟩ → [ expr ] ")
 		// ⟨subscript⟩ → '[' ⟨expr⟩ ']'
 		sscr := terex.Cons(l.Car, terex.Cons(l.Cddar(), nil))
 		return terex.Elem(sscr) // ( ⟨subscript⟩ expr )
@@ -158,7 +158,7 @@ func initRewriters() {
 	varOp = makeASTTermR("variable", "variable")
 	varOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨variable⟩ → TAG ⟨suffix⟩
-		T().Debugf("variable tree = ")
+		tracer().Debugf("variable tree = ")
 		terex.Elem(l).Dump(tracing.LevelDebug)
 		ll := makeTagSuffixes(terex.Elem(l.Cdar()), env)
 		ll = ll.Append(l.Cddr())
@@ -172,7 +172,7 @@ func initRewriters() {
 		//     | ( ⟨numeric expression⟩ , ⟨numeric expression⟩ )
 		//     | ⟨atom⟩ [ ⟨expression⟩ , ⟨expression⟩ ]
 		//     | OfOp ⟨expression⟩ of ⟨primary⟩
-		T().Infof("primary tree = ")
+		tracer().Infof("primary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if !singleArg(l) {
 			if l.Length() == 3 {
@@ -203,7 +203,7 @@ func initRewriters() {
 		// ⟨secondary⟩ → ⟨primary⟩
 		//     | ⟨secondary⟩ PrimaryOp ⟨primary⟩
 		//     | ⟨secondary⟩  ⟨transformer⟩
-		T().Infof("secondary tree = ")
+		tracer().Infof("secondary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) {
 			return terex.Elem(l.Cdar()) // ⟨secondary⟩ → ⟨primary⟩
@@ -224,7 +224,7 @@ func initRewriters() {
 		// ⟨tertiary⟩ → ⟨secondary⟩
 		//     | ⟨tertiary⟩  SecondaryOp  ⟨secondary⟩
 		//     | ⟨tertiary⟩  PlusOrMinus  ⟨secondary⟩
-		T().Infof("tertiary tree = ")
+		tracer().Infof("tertiary tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) {
 			return terex.Elem(l.Cdar()) // ⟨tertiary⟩ → ⟨secondary⟩
@@ -239,7 +239,7 @@ func initRewriters() {
 	exprOp = makeASTTermR("expression", "expr")
 	exprOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨expression⟩ → ⟨subexpression⟩ | ⟨expression⟩  RelationOp  ⟨tertiary⟩
-		T().Infof("expression tree = ")
+		tracer().Infof("expression tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) {
 			return terex.Elem(l.Cdar()) // ⟨expression⟩ → ⟨subexpression⟩
@@ -252,7 +252,7 @@ func initRewriters() {
 	declOp = makeASTTermR("declaration", "decl")
 	declOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨declaration⟩ → Type  ⟨declaration list⟩
-		T().Infof("declaration tree = ")
+		tracer().Infof("declaration tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		op := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "vardecl")))
 		convertTerminalToken(terex.Elem(l.Cdar()), env)
@@ -272,7 +272,7 @@ func initRewriters() {
 	declvarOp = makeASTTermR("generic_variable", "generic_variable")
 	declvarOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨generic_variable⟩ → TAG ⟨generic_suffix⟩
-		T().Debugf("generic_variable tree = ")
+		tracer().Debugf("generic_variable tree = ")
 		terex.Elem(l).Dump(tracing.LevelDebug)
 		ll := makeTagSuffixes(terex.Elem(l.Cdar()), env)
 		ll = ll.Append(l.Cddr())
@@ -282,7 +282,7 @@ func initRewriters() {
 	declsuffixOp = makeASTTermR("generic_suffix", "generic_suffix")
 	declsuffixOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨generic suffix⟩ → ε | ⟨generic suffix⟩ TAG | ⟨generic suffix⟩ []
-		T().Debugf("generic suffix tree = ")
+		tracer().Debugf("generic suffix tree = ")
 		terex.Elem(l).Dump(tracing.LevelDebug)
 		if withoutArgs(l) {
 			return terex.Elem(nil) // ⟨generic suffix⟩ → ε
@@ -307,7 +307,7 @@ func initRewriters() {
 			}
 		} else { // ⟨suffix⟩ → ⟨generic suffix⟩ TAG | ⟨generic suffix⟩ []
 			t := l.Nth(3)
-			T().Errorf("----------- t = %v", t)
+			tracer().Errorf("----------- t = %v", t)
 			ll := makeTagSuffixes(terex.Elem(l.Cddar()), env)
 			l = terex.Cons(suf2.AsAtom(), ll)
 		}
@@ -317,7 +317,7 @@ func initRewriters() {
 	eqOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨equation⟩ → ⟨tertiary⟩ = ⟨right hand side⟩
 		// ⟨right hand side⟩ → ⟨tertiary⟩ | ⟨equation⟩ | ⟨assignment⟩
-		T().Infof("equation tree = ")
+		tracer().Infof("equation tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		l = equation(eqOp, l)
 		return terex.Elem(l)
@@ -326,7 +326,7 @@ func initRewriters() {
 	assignOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨assignment⟩ → ⟨variable⟩ := ⟨right hand side⟩
 		// ⟨right hand side⟩ → ⟨tertiary⟩ | ⟨equation⟩ | ⟨assignment⟩
-		T().Infof("assignment tree = ")
+		tracer().Infof("assignment tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		l = equation(assignOp, l)
 		return terex.Elem(l)
@@ -335,7 +335,7 @@ func initRewriters() {
 	transformOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨transformer⟩ → UnaryTransform ⟨primary⟩
 		//     | BinaryTransform ( ⟨tertiary⟩ , ⟨tertiary⟩ )
-		T().Infof("transformer tree = ")
+		tracer().Infof("transformer tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
 		if tokenArgEq(l, BinaryTransform) {
@@ -358,12 +358,12 @@ func initRewriters() {
 	tertiaryListOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨tertiary list⟩ → ⟨tertiary⟩ | ⟨tertiary list⟩ , ⟨tertiary⟩
 		l = l.Cdr // skip op 'tertiary_list'
-		T().Errorf("      l = %v", l.ListString())
+		tracer().Errorf("      l = %v", l.ListString())
 		comma := int(',')
 		l = l.Drop(func(a terex.Atom) bool {
 			return tokenEq(a, comma)
 		})
-		T().Errorf("filt. l = %v", l.ListString())
+		tracer().Errorf("filt. l = %v", l.ListString())
 		return terex.Elem(l)
 	}
 	stmtOp = makeASTTermR("statement", "stmt")
@@ -541,7 +541,7 @@ func equation(op terex.Operator, l *terex.GCons) *terex.GCons {
 	rhs := l.Nth(4)
 	if isSubAST(rhs, "equation") || isSubAST(rhs, "assignment") {
 		rlhs := terex.Elem(rhs).Sublist().AsList().Cdar() //.(*terex.GCons).Cadr()
-		T().Errorf("lhs = %v", terex.Elem(rlhs))
+		tracer().Errorf("lhs = %v", terex.Elem(rlhs))
 		neweq := terex.List(eqOp, l.Cdar(), rlhs)
 		eqs := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "equations")))
 		l = terex.List(terex.Atomize(eqs), rhs, neweq)
@@ -578,7 +578,7 @@ func tokenArg(l *terex.GCons) bool {
 func tokenArgEq(l *terex.GCons, tokval int) bool {
 	if l != nil && l.Length() > 1 && l.Cdar().Type() == terex.TokenType {
 		t := l.Cdar().Data.(*terex.Token)
-		T().Errorf("t.Value = %v", t.Value)
+		tracer().Errorf("t.Value = %v", t.Value)
 		if s, ok := t.Value.(string); ok {
 			return tokenIds[s] == tokval
 		}
@@ -615,15 +615,15 @@ func isSubAST(a terex.Atom, opname string) bool {
 }
 
 func isToken(a terex.Atom, tcat string) bool {
-	T().Errorf("isToken: %v (%v)", terex.Elem(a).AsList().Car, a.Type())
+	tracer().Errorf("isToken: %v (%v)", terex.Elem(a).AsList().Car, a.Type())
 	if a.Type() == terex.OperatorType {
 		o := a.Data.(terex.Operator)
 		//T().Errorf("o = %v", o)
 		if tok, ok := o.(pmmp.TokenOperator); ok {
-			T().Errorf("TOKEN: %v, %s|%s", tok, tok.Opname(), tok.Token().Name)
-			T().Errorf("TCAT = %s", tcat)
+			tracer().Errorf("TOKEN: %v, %s|%s", tok, tok.Opname(), tok.Token().Name)
+			tracer().Errorf("TCAT = %s", tcat)
 			if tok.Opname() == tcat || tok.Token().Name == tcat {
-				T().Errorf("TOKEN TRUE")
+				tracer().Errorf("TOKEN TRUE")
 				return true
 			}
 		} else if o.String() == tcat {
@@ -654,11 +654,11 @@ func isToken(a terex.Atom, tcat string) bool {
 //
 func makeTagSuffixes(arg terex.Element, env *terex.Environment) *terex.GCons {
 	tok := arg.AsAtom()
-	T().Infof("TAG = %v", tok)         // TAG is []string, e.g. "a.r" ⇒ "a", "r"
+	tracer().Infof("TAG = %v", tok)    // TAG is []string, e.g. "a.r" ⇒ "a", "r"
 	if tok.Type() != terex.TokenType { // not a TAG token
 		panic("cannot make suffixes from non-token tag")
 	}
-	T().Infof("TAG = %v", tok) // TAG is []string, e.g. "a.r" ⇒ "a", "r"
+	tracer().Infof("TAG = %v", tok) // TAG is []string, e.g. "a.r" ⇒ "a", "r"
 	e := convertTerminalToken(terex.Elem(tok), env)
 	tag := e.AsAtom().Data.(*terex.Token).Value.([]string)
 	var l *terex.GCons           // create list of suffix nodes, one for each suffix
@@ -687,6 +687,6 @@ func (po *mpPseudoOp) String() string {
 }
 
 func (po *mpPseudoOp) Call(e terex.Element, env *terex.Environment) terex.Element {
-	T().Errorf("PseudoOperator not to be called")
+	tracer().Errorf("PseudoOperator not to be called")
 	return terex.Elem(nil)
 }

@@ -84,7 +84,7 @@ func (ev *Evaluator) EncapsuleVariable(id int32) {
 func (ev *Evaluator) EncapsuleVarsInMemory(mf *runtime.DynamicMemoryFrame) {
 	mf.SymbolTable.Each(func(name string, sym *runtime.Tag) {
 		vref := variables.VarFromTag(sym)
-		T().P("var", vref.FullName()).Debugf("encapsule")
+		tracer().P("var", vref.FullName()).Debugf("encapsule")
 		ev.EncapsuleVariable(vref.ID()) // vref is now capsule
 	})
 }
@@ -97,7 +97,7 @@ func AllocateVariableInMemory(vref *variables.VarRef,
 	mf *runtime.DynamicMemoryFrame) *variables.VarRef {
 	//
 	mf.SymbolTable.InsertTag(vref.AsTag())
-	T().P("var", vref.FullName()).Debugf("allocating variable in %s", mf.Name)
+	tracer().P("var", vref.FullName()).Debugf("allocating variable in %s", mf.Name)
 	return vref
 }
 
@@ -125,7 +125,7 @@ func (ev *Evaluator) FindVariableReferenceInMemory(vref *variables.VarRef, doAll
 	*variables.VarRef, *runtime.DynamicMemoryFrame) {
 	//
 	if vref.Declaration() == nil {
-		T().P("var", vref.FullName()).Errorf("attempt to store variable without decl. in memory")
+		tracer().P("var", vref.FullName()).Errorf("attempt to store variable without decl. in memory")
 		return vref, nil
 	}
 	var sym *variables.VarRef
@@ -135,15 +135,15 @@ func (ev *Evaluator) FindVariableReferenceInMemory(vref *variables.VarRef, doAll
 	if tag != nil { // found tag declaration in scope
 		memframe = ev.MemFrameStack.FindMemoryFrameForScope(scope)
 		varname := vref.Name()
-		T().P("var", varname).Debugf("var in ? %s", memframe)
+		tracer().P("var", varname).Debugf("var in ? %s", memframe)
 		s := memframe.SymbolTable.ResolveTag(varname)
 		if s == nil { // no variable ref incarnation => create one
-			T().P("var", varname).Debugf("not found in memory")
+			tracer().P("var", varname).Debugf("not found in memory")
 			if doAlloc {
 				sym = AllocateVariableInMemory(vref, memframe)
 			}
 		} else { // already present, return this one
-			T().P("var", varname).Debugf("variable already present in memory")
+			tracer().P("var", varname).Debugf("variable already present in memory")
 			sym = variables.VarFromTag(s)
 		}
 	} else {
@@ -164,15 +164,15 @@ func (ev *Evaluator) Declare(decl *variables.VarDecl) {
 	tagname := decl.FullName()
 	tag, scope := ev.ScopeTree.Current().ResolveTag(tagname)
 	if tag != nil { // already found in scope stack
-		T().P("tag", tag).Debugf("declare: found tag in scope %s", scope.Name)
-		T().P("decl", tag).Debugf("variable already declared - re-declaring")
+		tracer().P("tag", tag).Debugf("declare: found tag in scope %s", scope.Name)
+		tracer().P("decl", tag).Debugf("variable already declared - re-declaring")
 		// Erase all existing variables and re-define symbol
 		scope.Tags().InsertTag(decl.AsTag())
 	} else { // enter new symbol in global scope
 		scope = ev.ScopeTree.Globals()
 		scope.Tags().InsertTag(decl.AsTag())
 	}
-	T().P("decl", decl.Name()).Debugf("declared symbol in %s", scope.Name)
+	tracer().P("decl", decl.Name()).Debugf("declared symbol in %s", scope.Name)
 }
 
 // Variable creates a variable reference in a memory frame.

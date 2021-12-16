@@ -18,7 +18,7 @@ func LoadStandardLanguage() *terex.Environment {
 func defineExprOps(env *terex.Environment) {
 	env.Defn("SecondaryOp", func(e terex.Element, env *terex.Environment) terex.Element {
 		lexeme, toktype, _, thread := setupFrom(e, env)
-		T().Debugf("call of %s/%s", lexeme, toktype)
+		tracer().Debugf("call of %s/%s", lexeme, toktype)
 		errelem, _, argv := args(e, 2, env)
 		if !errelem.IsNil() {
 			return errelem
@@ -43,7 +43,7 @@ func defineExprOps(env *terex.Environment) {
 		if err != nil {
 			//
 		}
-		T().Debugf("%v %s %v = %s", v1.Self(), lexeme, v2.Self(), v.Self())
+		tracer().Debugf("%v %s %v = %s", v1.Self(), lexeme, v2.Self(), v.Self())
 		return terex.Elem(v)
 	})
 }
@@ -58,7 +58,7 @@ func args(e terex.Element, n int, env *terex.Environment) (terex.Element, int, *
 }
 
 func ErrorPacker(emsg string, env *terex.Environment) terex.Element {
-	T().Errorf(emsg)
+	tracer().Errorf(emsg)
 	env.Error(errors.New(emsg))
 	return terex.Elem(terex.ErrorAtom(emsg))
 }

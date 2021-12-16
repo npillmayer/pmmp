@@ -23,7 +23,7 @@ func (ev *Evaluator) Whatever() *variables.VarRef {
 	var vref *variables.VarRef
 	sym, _ := ev.ScopeTree.Globals().ResolveTag("_whtvr")
 	if sym == nil {
-		T().Errorf("'whatever'-variable not correctly initialized")
+		tracer().Errorf("'whatever'-variable not correctly initialized")
 	} else {
 		inx := []float64{1.0}
 		whateverCounter++
@@ -41,7 +41,7 @@ func (ev *Evaluator) Equation(left, right pmmp.Value) (err error) {
 	var zero pmmp.Value
 	if zero, err = right.Self().Minus(left); err == nil {
 		if zero.IsKnown() {
-			T().Debugf("skipping equation for 2 known values")
+			tracer().Debugf("skipping equation for 2 known values")
 			return
 		}
 		if zero.Self().IsPair() {
@@ -57,7 +57,7 @@ func (ev *Evaluator) Equation(left, right pmmp.Value) (err error) {
 		return
 	}
 	if err != nil {
-		T().Errorf("cannot create equation: %v", err)
+		tracer().Errorf("cannot create equation: %v", err)
 	}
 	return
 }
@@ -79,13 +79,13 @@ else assign a path value to a path variable.
 func (ev *Evaluator) Assign(lvalue *variables.VarRef, e pmmp.Value) error {
 	varname := lvalue.FullName()
 	oldserial := lvalue.ID()
-	T().P("var", varname).Debugf("assignment of lvalue #%d", oldserial)
+	tracer().P("var", varname).Debugf("assignment of lvalue #%d", oldserial)
 	ev.EncapsuleVariable(oldserial)
 	vref, mf := ev.FindVariableReferenceInMemory(lvalue, false)
 	vref.Set(nil) // now lvalue is unset / unsolved
-	T().P("var", varname).Debugf("unset in %v", mf)
+	tracer().P("var", varname).Debugf("unset in %v", mf)
 	vref.Reincarnate()
-	T().P("var", varname).Debugf("new lvalue incarnation #%d", vref.ID)
+	tracer().P("var", varname).Debugf("new lvalue incarnation #%d", vref.ID)
 	if vref.Type() != pmmp.NumericType && vref.Type() != pmmp.PathType {
 		//vref.Set(e.Other) // TODO Value of type path
 		panic(fmt.Sprintf("assignment of type %v not yet implemented", vref.Type()))
@@ -101,10 +101,10 @@ func (ev *Evaluator) Assign(lvalue *variables.VarRef, e pmmp.Value) error {
 func Save(rt *runtime.Runtime, tag string) {
 	sym, scope := rt.ScopeTree.Current().ResolveTag(tag)
 	if sym != nil { // already found in scope stack
-		T().P("tag", tag).Debugf("save: found tag in scope %s",
+		tracer().P("tag", tag).Debugf("save: found tag in scope %s",
 			scope.Name)
 	}
-	T().Debugf("declaring %s in current scope", tag)
+	tracer().Debugf("declaring %s in current scope", tag)
 	rt.ScopeTree.Current().DefineTag(tag)
 }
 
@@ -139,7 +139,7 @@ func (ev *Evaluator) PopScopeAndMemory() *runtime.DynamicMemoryFrame {
 	hidden.Name = "(hidden)"
 	mf := ev.MemFrameStack.PopMemoryFrame()
 	if mf.Scope != hidden {
-		T().P("mem", mf.Name).Errorf("groups out of sync?")
+		tracer().P("mem", mf.Name).Errorf("groups out of sync?")
 	}
 	return mf
 }

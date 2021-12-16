@@ -8,13 +8,12 @@ import (
 
 	"github.com/npillmayer/gorgo/runtime"
 	"github.com/npillmayer/pmmp"
-	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing"
 )
 
-// T traces to the global syntax tracer
-func T() tracing.Trace {
-	return gtrace.SyntaxTracer
+// tracer traces with key 'pmmp.grammar'.
+func tracer() tracing.Trace {
+	return tracing.Select("pmmp.grammar")
 }
 
 // === Variable Type Declarations ============================================
@@ -69,7 +68,7 @@ func NewVarDecl(name string, typ pmmp.ValueType) *VarDecl {
 	decl.Tag.Typ = int8(typ)
 	decl.Tag.UData = decl
 	decl.baseDecl = decl // this pointer should never be nil
-	T().P("decl", decl.FullName()).Debugf("atomic variable type declaration created")
+	tracer().P("decl", decl.FullName()).Debugf("atomic variable type declaration created")
 	return decl
 }
 
@@ -141,7 +140,7 @@ func (s *Suffix) FullName() string {
 
 // GetBaseType gets the type of the base tag.
 // func (s *Suffix) GetBaseType() pmmp.ValueType {
-// 	return s.baseDecl.Type()
+//     return s.baseDecl.Type()
 // }
 
 // CreateSuffix is a function to create and initialize a suffix to
@@ -166,7 +165,7 @@ func CreateSuffix(name string, typ pmmp.ValueType, parent *Suffix) *Suffix {
 			for ch != nil { // check all direct suffixes
 				if (typ == pmmp.SuffixType && ch.suffixName == name) ||
 					(ch.isSubscript && typ == pmmp.SubscriptType) {
-					T().P("decl", ch.FullName()).Debugf("variable type already declared")
+					tracer().P("decl", ch.FullName()).Debugf("variable type already declared")
 					return ch // we're done
 				}
 				ch = ch.Sibling
@@ -187,7 +186,7 @@ func CreateSuffix(name string, typ pmmp.ValueType, parent *Suffix) *Suffix {
 		return d.AsSuffix()
 	}
 	s.appendToSuffix(parent) // parent given => append to it
-	T().P("decl", s.FullName()).Debugf("variable type decl suffix created")
+	tracer().P("decl", s.FullName()).Debugf("variable type decl suffix created")
 	return s
 }
 
@@ -210,7 +209,7 @@ func (s *Suffix) appendToSuffix(parent *Suffix) *Suffix {
 		}
 		ch.Sibling = s
 	}
-	T().P("decl", s.FullName()).Debugf("new variable type suffix declaration")
+	tracer().P("decl", s.FullName()).Debugf("new variable type suffix declaration")
 	return s
 }
 
@@ -261,7 +260,7 @@ type VarRef struct {
 
 // CreateVarRef creates a variable reference. Low level method.
 func CreateVarRef(decl *Suffix, value pmmp.Value, indices []float64) *VarRef {
-	T().Debugf("creating %s var for %v", decl.Type().String(), decl.FullName())
+	tracer().Debugf("creating %s var for %v", decl.Type().String(), decl.FullName())
 	v := &VarRef{
 		decl:       decl,
 		subscripts: indices,
@@ -288,7 +287,7 @@ func (v *VarRef) String() string {
 //
 // func (v *VarRef) Name() string {
 // if len(v.cachedName) == 0 {
-// 	v.cachedName = v.FullName()
+//     v.cachedName = v.FullName()
 // }
 // return v.cachedName
 // }
@@ -357,10 +356,10 @@ func (v *VarRef) SuffixesString() string {
 // y-part would not be distinguishable for the LEQ.
 //
 // type PairPartRef struct {
-// 	runtime.Tag
-// 	id      int32      // serial ID
-// 	Pairvar *VarRef    // pair parent
-// 	Value   pmmp.Value // value of type numeric
+//     runtime.Tag
+//     id      int32      // serial ID
+//     Pairvar *VarRef    // pair parent
+//     Value   pmmp.Value // value of type numeric
 // }
 //
 type pairVarValues struct { // has to satisfy interface pmmp.Value
@@ -410,9 +409,9 @@ func newPairVarValues(v *VarRef) *pairVarValues {
 
 // CreatePairTypeVarRef creates a pair variable reference. Low level method.
 func createPairTypeVarRef(v *VarRef, decl *Suffix, value pmmp.Value, indices []float64) *VarRef {
-	T().Debugf("extending pair var for %v", decl.FullName())
+	tracer().Debugf("extending pair var for %v", decl.FullName())
 	v.Typ = int8(pmmp.PairType)
-	T().Debugf("creating pair values proxy")
+	tracer().Debugf("creating pair values proxy")
 	pv := newPairVarValues(v)
 	v.Value = pv
 	v.Set(value)
@@ -458,7 +457,7 @@ func (v *VarRef) IsPair() bool {
 // XPart gets the x-part of a pair variable
 func (v *VarRef) XPart() *PairPartValue {
 	if !v.IsPair() {
-		T().P("var", v.Name).Errorf("cannot access x-part of non-pair")
+		tracer().P("var", v.Name).Errorf("cannot access x-part of non-pair")
 		return nil
 	}
 	if v.Value == nil {
@@ -471,7 +470,7 @@ func (v *VarRef) XPart() *PairPartValue {
 // YPart gets the y-part of a pair variable
 func (v *VarRef) YPart() *PairPartValue {
 	if !v.IsPair() {
-		T().P("var", v.Name).Errorf("cannot access x-part of non-pair")
+		tracer().P("var", v.Name).Errorf("cannot access x-part of non-pair")
 		return nil
 	}
 	if v.Value == nil {
@@ -482,11 +481,11 @@ func (v *VarRef) YPart() *PairPartValue {
 }
 
 // func (v *VarRef) YPart() *PairPartRef {
-// 	if !v.IsPair() {
-// 		T().P("var", v.Name).Errorf("cannot access y-part of non-pair")
-// 		return nil
-// 	}
-// 	return PPFromTag(v.Children)
+//     if !v.IsPair() {
+//         T().P("var", v.Name).Errorf("cannot access y-part of non-pair")
+//         return nil
+//     }
+//     return PPFromTag(v.Children)
 // }
 
 /*
@@ -495,19 +494,19 @@ Get the x-part value of a pair.
 Interface runtime.Assignable
 */
 // func (ppart *PairPartRef) GetValue() interface{} {
-// 	return ppart.Value
+//     return ppart.Value
 // }
 
 // Interface runtime.Assignable
 // func (ppart *PairPartRef) SetValue(val interface{}) {
-// 	T().P("var", ppart.Name).Debugf("new value: %v", val)
-// 	ppart.Value = val
-// 	ppart.Pairvar.PullValue()
+//     T().P("var", ppart.Name).Debugf("new value: %v", val)
+//     ppart.Value = val
+//     ppart.Pairvar.PullValue()
 // }
 
 // IsKnown returns wether this pair part variable has a known value.
 // func (ppart *PairPartRef) IsKnown() bool {
-// 	return (ppart.Value != nil)
+//     return (ppart.Value != nil)
 // }
 
 // FullName gets the full normalized (canonical) name of a variable,  i.e.
@@ -564,7 +563,7 @@ func (v *VarRef) Get() pmmp.Value {
 
 // Set sets a variable's value.
 func (v *VarRef) Set(val pmmp.Value) {
-	T().P("var", v.Name).Debugf("new value: %v", val)
+	tracer().P("var", v.Name).Debugf("new value: %v", val)
 	if !v.IsPair() {
 		switch v.Type() {
 		case pmmp.NumericType:
@@ -576,7 +575,7 @@ func (v *VarRef) Set(val pmmp.Value) {
 		}
 		return
 	}
-	T().Debugf("setting pair values")
+	tracer().Debugf("setting pair values")
 	var xpart *PairPartValue = v.XPart()
 	var ypart *PairPartValue = v.YPart()
 	if val == nil {
@@ -596,18 +595,18 @@ func (v *VarRef) Set(val pmmp.Value) {
 // a numeric value is set, the parent pair creates a combined pair value.
 //
 // func (v *VarRef) PullValue() {
-// 	if v.IsPair() {
-// 		var ppart1, ppart2 *PairPartRef
-// 		ppart1 = PPFromTag(v.Sibling)
-// 		ppart2 = PPFromTag(v.Children)
-// 		if ppart1 != nil && ppart2 != nil {
-// 			if ppart1.Value != nil && ppart2.Value != nil {
-// 				v.Value = arithm.P(ppart1.Value.(float64), ppart2.Value.(float64))
-// 				T().P("var", v.Name).Debugf("pair value = %s",
-// 					v.Value.(arithm.Pair).String())
-// 			}
-// 		}
-// 	}
+//     if v.IsPair() {
+//         var ppart1, ppart2 *PairPartRef
+//         ppart1 = PPFromTag(v.Sibling)
+//         ppart2 = PPFromTag(v.Children)
+//         if ppart1 != nil && ppart2 != nil {
+//             if ppart1.Value != nil && ppart2.Value != nil {
+//                 v.Value = arithm.P(ppart1.Value.(float64), ppart2.Value.(float64))
+//                 T().P("var", v.Name).Debugf("pair value = %s",
+//                     v.Value.(arithm.Pair).String())
+//             }
+//         }
+//     }
 // }
 
 // ValueString gets

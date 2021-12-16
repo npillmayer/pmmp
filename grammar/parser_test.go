@@ -12,26 +12,23 @@ import (
 )
 
 func TestParseVariable(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	parse("a.r1", false, t)
 }
 
 func TestParseAtom(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	parse("true", false, t)
 }
 
 func TestParseSecondary(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	parse("1+2", false, t)
 	parse("1+-2", false, t)
 	parse("1+-1/2a", false, t)
@@ -39,18 +36,16 @@ func TestParseSecondary(t *testing.T) {
 }
 
 func TestParseTertiary(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	parse("7 - -a1r", false, t) // parser sees: 7 - - a 1 r
 }
 
 func TestParseList(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+	//
 	// parse("a.r1b", false, t)
 	// parse("true", false, t)
 	// parse("1/2", false, t)
@@ -74,107 +69,107 @@ func TestParseList(t *testing.T) {
 }
 
 func TestVariableAST1(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("a.r1b", t)
 }
 
 func TestAtom1AST(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("true", t)
 }
 
 func TestAtom2AST(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("1/2", t)
 }
 
 func TestPrimaryAST(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("xpart z", t)
 }
 
 func TestSecondaryAST(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("a * xpart z", t)
 }
 
 func TestTertiaryAST(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("a * xpart z - 4", t)
 }
 
 func TestExpr1AST(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("x.r' < -1/4", t)
 }
 
 func TestExpr2AST(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("x < (1 + 2)", t)
 }
 
 func TestVariableAST2(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("a[7-b]c", t)
 }
 
 func TestPair1(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("b+(1,3a)", t)
 }
 
 func TestInterpolation(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("-a[1,3b]", t)
 }
 
 func TestOf(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("point 2 of p", t)
 }
 
 func TestDeclaration1(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("pair p, q", t)
 }
 
 func TestDeclaration2(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("pair p[]r", t)
 }
 
 func TestEquation1(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	ast := compile("a=b=c:=5", t)
 	l := terex.Elem(ast).Sublist().AsList().Length() - 1
 	t.Logf("eqs = %v", terex.Elem(ast).Sublist())
@@ -185,83 +180,83 @@ func TestEquation1(t *testing.T) {
 }
 
 func TestTransformerUn(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("a shifted (1,2)", t)
 }
 
 func TestTransformerBin(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("a reflectedabout(b,2)", t)
 }
 
 func TestFuncall(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("min(1,2,3)", t)
 }
 
 func TestStatement1(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("pair p; p = q;", t)
 }
 
 func TestPathJoinTension(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	//compile("..tension 1.2..;", t)
 	compile("..tension 1.2 and 4..;", t)
 }
 
 func TestPathJoinControls(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	//compile("..controls (1,2)..;", t)
 	compile("..controls (1,2) and (3,4)..;", t)
 	t.Fail()
 }
 
 func TestPathAtom(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("z1;", t)
 }
 
 func TestPathExpression(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("z1{curl 1}..controls (1,2)..z2--z3;", t)
 }
 
 func TestGroup(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("a = begingroup numeric a; 5 endgroup;", t)
 }
 
 func TestCommand(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
 	teardown := gotestingadapter.RedirectTracing(t)
 	defer teardown()
+	//
 	compile("save a.r, @$; pickup pencircle; show a;", t)
 	t.Fail()
 }
 
 func TestDraw(t *testing.T) {
-	gtrace.SyntaxTracer = gotestingadapter.New()
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
 	defer teardown()
+	//
 	compile("draw a.r withcolor white withpen pensquare;", t)
 	t.Fail()
 }
@@ -306,7 +301,7 @@ func parse(input string, dot bool, t *testing.T) {
 			t.Error("cannot open tmp file for graphviz output")
 		} else {
 			sppf.ToGraphViz(parsetree, tmpfile)
-			T().Infof("Exported parse tree to %s", tmpfile.Name())
+			tracer().Infof("Exported parse tree to %s", tmpfile.Name())
 		}
 	}
 }
