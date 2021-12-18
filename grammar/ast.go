@@ -1,7 +1,6 @@
 package grammar
 
 import (
-	"github.com/npillmayer/gorgo/lr/scanner"
 	"github.com/npillmayer/gorgo/lr/sppf"
 	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/gorgo/terex/termr"
@@ -145,7 +144,7 @@ func initRewriters() {
 		tracer().Infof("subscript tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) { // ⟨subscript⟩ → NUMBER
-			tracer().Errorf("⟨subscript⟩ → NUMBER ")
+			tracer().Debugf("⟨subscript⟩ → NUMBER ")
 			e := terex.Elem(l.Cdar())
 			e = convertTerminalToken(e, env)
 			return terex.Elem(l) // ( ⟨subscript⟩ NUMBER )
@@ -187,7 +186,7 @@ func initRewriters() {
 				op := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "make-pair")))
 				return terex.Elem(terex.List(op, l.Cddar(), l.Nth(5)))
 			}
-			if tokenArgEq(l, OfOp) {
+			if tokenArgEq(l, int(OfOp)) {
 				// ⟨primary⟩ → OfOp ⟨expression⟩ of ⟨primary⟩
 				opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
 				return terex.Elem(terex.List(opAtom, l.Cddar(), l.Nth(5)))
@@ -297,7 +296,7 @@ func initRewriters() {
 		}
 		if singleArg(l) { // ⟨generic suffix⟩ → ε TAG | ε []
 			convertTerminalToken(terex.Elem(l.Cdar()), env)
-			if tokenArgEq(l, scanner.Ident) {
+			if tokenArgEq(l, int(Ident)) {
 				ll := makeTagSuffixes(terex.Elem(l.Cdar()), env)
 				l = l.Append(ll)
 			} else {
@@ -338,7 +337,7 @@ func initRewriters() {
 		tracer().Infof("transformer tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
-		if tokenArgEq(l, BinaryTransform) {
+		if tokenArgEq(l, int(BinaryTransform)) {
 			l := terex.List(opAtom, l.Nth(4), l.Nth(6))
 			//T().Errorf("l = %v", terex.Elem(l))
 			return terex.Elem(l)
@@ -580,7 +579,7 @@ func tokenArgEq(l *terex.GCons, tokval int) bool {
 		t := l.Cdar().Data.(*terex.Token)
 		tracer().Errorf("t.Value = %v", t.Value)
 		if s, ok := t.Value.(string); ok {
-			return tokenIds[s] == tokval
+			return tokenTypeFromLexeme[s] == tokType(tokval)
 		}
 	}
 	return false
@@ -591,7 +590,7 @@ func tokenEq(a terex.Atom, tokval int) bool {
 		convertTerminalToken(terex.Elem(a), nil)
 		t := a.Data.(*terex.Token)
 		if s, ok := t.Value.(string); ok {
-			return tokenIds[s] == tokval
+			return tokenTypeFromLexeme[s] == tokType(tokval)
 		}
 	}
 	return false

@@ -1,298 +1,309 @@
 package grammar
 
 import (
+	"bufio"
 	"io/ioutil"
+	"strings"
 	"testing"
 
 	"github.com/npillmayer/gorgo/lr/sppf"
 	"github.com/npillmayer/gorgo/terex"
-	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing"
 	"github.com/npillmayer/schuko/tracing/gotestingadapter"
 )
 
 func TestParseVariable(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	parse("a.r1", false, t)
+	parse("a.r1", true, "variable", false, t)
 }
 
 func TestParseAtom(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	parse("true", false, t)
+	parse("true", true, "atom", false, t)
 }
 
-func TestParseSecondary(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+func TestParseTertiary1(t *testing.T) {
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	parse("1+2", false, t)
-	parse("1+-2", false, t)
-	parse("1+-1/2a", false, t)
-	parse("a-(1,2)", false, t)
+	parse("1+2", true, "tertiary", false, t)
+	parse("1+-2", true, "tertiary", false, t)
+	parse("1+-1/2a", true, "tertiary", false, t)
+	parse("a-(1,2)", true, "tertiary", false, t)
 }
 
-func TestParseTertiary(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+func TestParseTertiary2(t *testing.T) {
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	parse("7 - -a1r", false, t) // parser sees: 7 - - a 1 r
+	parse("7 - -a1r", true, "tertiary", false, t) // parser sees: 7 - - a 1 r
 }
 
 func TestParseList(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	// parse("a.r1b", false, t)
-	// parse("true", false, t)
-	// parse("1/2", false, t)
-	// parse("xpart z", false, t)
-	// parse("a * xpart z", false, t)
-	// parse("x.r' < -1/4", false, t)
+	parse("a.r1b", true, "variable", false, t)
+	parse("true", true, "atom", false, t)
+	parse("1/2", true, "atom", false, t)
+	parse("xpart z", true, "primary", false, t)
+	parse("a * xpart z", true, "secondary", false, t)
+	parse("x.r' < -1/4", true, "boolean_expression", false, t)
 
-	// parse("numeric p;", false, t)
-	// parse("pair p[];", false, t)
-	// parse("a=1;", false, t)
-	// parse("a=b=5;", false, t)
-	// parse("b = a shifted (1,2)", false, t)
-	// parse("pair p; p = q;", false, t)
-	// parse("..tension 1.2..;", false, t)
-	// parse("a = begingroup 5 endgroup;", false, t)
-	// parse("a = begingroup numeric a; 5 endgroup;", false, t)
-	// parse("save a, @$;", false, t)
-
-	//parse("def a = XXX enddef;", true, t)
-	parse("def a(expr x) = XXX enddef;", true, t)
+	parse("numeric p", true, "declaration", false, t)
+	parse("pair p[]", true, "declaration", false, t)
+	parse("a=1", true, "equation", false, t)
+	parse("a=b=5", true, "equation", false, t)
+	parse("b = a shifted (1,2)", true, "equation", false, t)
+	parse("pair p; p = q;", true, "statement_list", false, t)
+	parse("..tension 1.2..", true, "basic_path_join", false, t)
+	parse("a = begingroup 5 endgroup", true, "equation", false, t)
+	parse("a = begingroup numeric a; 5 endgroup", true, "statement", false, t)
+	parse("save a, @$", true, "command", false, t)
+	//
+	// TODO parse("def a = XXX enddef", true, "macro_definition", false, t)
+	// TODO parse("def a(expr x) = XXX enddef;", true, false, t)
 }
 
-func TestVariableAST1(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+func TestVariable1AST(t *testing.T) {
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("a.r1b", t)
+	compile("a.r1b", "variable", t)
 }
 
 func TestAtom1AST(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("true", t)
+	compile("true", "atom", t)
 }
 
 func TestAtom2AST(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("1/2", t)
+	compile("1/2", "atom", t)
 }
 
 func TestPrimaryAST(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("xpart z", t)
+	compile("xpart z", "primary", t)
 }
 
 func TestSecondaryAST(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("a * xpart z", t)
+	compile("a * xpart z", "secondary", t)
 }
 
 func TestTertiaryAST(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("a * xpart z - 4", t)
+	compile("a * xpart z - 4", "tertiary", t)
 }
 
 func TestExpr1AST(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("x.r' < -1/4", t)
+	compile("x.r' < -1/4", "boolean_expression", t)
 }
 
 func TestExpr2AST(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("x < (1 + 2)", t)
+	compile("x < (1 + 2)", "boolean_expression", t)
 }
 
 func TestVariableAST2(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("a[7-b]c", t)
+	compile("a[7-b]c", "primary", t)
 }
 
 func TestPair1(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("b+(1,3a)", t)
+	compile("b+(1,3a)", "tertiary", t)
 }
 
 func TestInterpolation(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("-a[1,3b]", t)
+	compile("-a[1,3b]", "primary", t)
 }
 
 func TestOf(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("point 2 of p", t)
+	compile("point 2 of p", "primary", t)
 }
 
 func TestDeclaration1(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("pair p, q", t)
+	compile("pair p, q", "declaration", t)
 }
 
 func TestDeclaration2(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("pair p[]r", t)
+	compile("pair p[]r", "declaration", t)
 }
 
 func TestEquation1(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	ast := compile("a=b=c:=5", t)
+	ast := compile("a=b=c:=5", "statement", t)
 	l := terex.Elem(ast).Sublist().AsList().Length() - 1
 	t.Logf("eqs = %v", terex.Elem(ast).Sublist())
 	if l != 3 {
 		t.Errorf("expected sequence of 3 equations, got %d", l)
 	}
-	t.Fail()
 }
 
 func TestTransformerUn(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("a shifted (1,2)", t)
+	compile("a shifted (1,2)", "primary", t)
 }
 
 func TestTransformerBin(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("a reflectedabout(b,2)", t)
+	compile("a reflectedabout(b,2)", "primary", t)
 }
 
 func TestFuncall(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("min(1,2,3)", t)
+	compile("min(1,2,3)", "function_call", t)
 }
 
 func TestStatement1(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("pair p; p = q;", t)
+	compile("pair p; p = q;", "statement_list", t)
 }
 
 func TestPathJoinTension(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	//compile("..tension 1.2..;", t)
-	compile("..tension 1.2 and 4..;", t)
+	compile("..tension 1.2..", "basic_join", t)
+	compile("..tension 1.2 and 4..", "basic_join", t)
 }
 
 func TestPathJoinControls(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	//compile("..controls (1,2)..;", t)
-	compile("..controls (1,2) and (3,4)..;", t)
-	t.Fail()
+	compile("..controls (1,2)..", "basic_join", t)
+	compile("..controls (1,2) and (3,4)..", "basic_join", t)
 }
 
 func TestPathAtom(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("z1;", t)
+	compile("z1", "atom", t) // path
 }
 
 func TestPathExpression(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("z1{curl 1}..controls (1,2)..z2--z3;", t)
+	compile("z1{curl 1}..controls (1,2)..z2--z3", "path_join", t)
 }
 
 func TestGroup(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("a = begingroup numeric a; 5 endgroup;", t)
+	compile("a = begingroup numeric a; 5 endgroup;", "statement_list", t)
 }
 
 func TestCommand(t *testing.T) {
-	teardown := gotestingadapter.RedirectTracing(t)
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("save a.r, @$; pickup pencircle; show a;", t)
-	t.Fail()
+	compile("save a.r, @$; pickup pencircle; show a;", "statement_list", t)
 }
 
 func TestDraw(t *testing.T) {
-	teardown := gotestingadapter.QuickConfig(t, "tyse.fonts")
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	compile("draw a.r withcolor white withpen pensquare;", t)
-	t.Fail()
+	compile("draw a.r withcolor white withpen pensquare;", "statement_list", t)
 }
 
 // ---------------------------------------------------------------------------
 
-func compile(input string, t *testing.T) *terex.GCons {
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelError)
-	tree, retr, err := Parse(input)
-	if err != nil {
+func compile(input string, starter string, t *testing.T) *terex.GCons {
+	level := tracing.Select("pmmp.grammar").GetTraceLevel()
+	tracing.Select("pmmp.grammar").SetTraceLevel(tracing.LevelError)
+	tracing.Select("gorgo.lr").SetTraceLevel(tracing.LevelError)
+	//
+	parser, g := createParser(starter)
+	scan := NewLexer(bufio.NewReader(strings.NewReader(input)))
+	accept, err := parser.Parse(scan, nil)
+	if err != nil || !accept {
 		t.Error(err)
+		return nil
 	}
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelInfo)
-	ast, _, err := AST(tree, retr)
+	tree, retr := parser.ParseForest(), earleyTokenReceiver(parser)
+	tracing.Select("pmmp.grammar").SetTraceLevel(tracing.LevelInfo)
+	ast, _, err := makeAST(g, tree, retr)
 	if err != nil {
 		t.Error(err)
 	}
 	terex.Elem(ast).Dump(tracing.LevelInfo)
+	tracing.Select("pmmp.grammar").SetTraceLevel(level)
 	if ast == nil {
 		t.Errorf("AST is empty")
 	}
 	return ast
 }
 
-func parse(input string, dot bool, t *testing.T) {
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelInfo)
-	parser := createParser()
-	scan, _ := mpLexer.Scanner(input)
-	gtrace.SyntaxTracer.SetTraceLevel(tracing.LevelDebug)
+func parse(input string, acceptable bool, starter string, dot bool, t *testing.T) {
+	level := tracing.Select("pmmp.grammar").GetTraceLevel()
+	tracing.Select("pmmp.grammar").SetTraceLevel(tracing.LevelInfo)
+	tracing.Select("gorgo.lr").SetTraceLevel(tracing.LevelInfo)
+	//
+	parser, _ := createParser(starter)
+	scan := NewLexer(bufio.NewReader(strings.NewReader(input)))
+	//
+	tracing.Select("pmmp.grammar").SetTraceLevel(tracing.LevelDebug)
 	accept, err := parser.Parse(scan, nil)
 	t.Logf("accept=%v, input=%s", accept, input)
 	if err != nil {
 		t.Error(err)
 	}
-	if !accept {
-		t.Errorf("No accept. Not a valid MetaPost expression")
+	if acceptable && !accept {
+		t.Errorf("expected parser to recognize input, didn't: %q", input)
+	} else if !acceptable && accept {
+		t.Errorf("expected parser to fail on input, didn't: %q", input)
 	}
 	if err == nil && accept && dot {
 		parsetree := parser.ParseForest()
@@ -303,5 +314,7 @@ func parse(input string, dot bool, t *testing.T) {
 			sppf.ToGraphViz(parsetree, tmpfile)
 			tracer().Infof("Exported parse tree to %s", tmpfile.Name())
 		}
+		tmpfile.Close()
 	}
+	tracing.Select("pmmp.grammar").SetTraceLevel(level)
 }

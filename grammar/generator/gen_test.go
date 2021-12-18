@@ -19,8 +19,12 @@ func TestGen(t *testing.T) {
 	G = bytes.Buffer{}
 	scanner, file := scannerFor("pmmp-grammar.txt")
 	defer file.Close()
-	out, gofile := makeOutputFile("G.txt")
+	out, gofile := makeOutputFile("../G.go")
 	defer gofile.Close()
+	out.WriteString("package grammar\n\n")
+	out.WriteString(`import "github.com/npillmayer/gorgo/lr"`)
+	out.WriteString("\n\n// created by TestGen(), please do not edit\n")
+	out.WriteString("func createGrammarRules(b *lr.GrammarBuilder) {\n")
 	initSymbols()
 	var lhs string
 	for scanner.Scan() {
@@ -29,9 +33,11 @@ func TestGen(t *testing.T) {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
-		}
-		if strings.HasPrefix(line, "STOP") {
+		} else if strings.HasPrefix(line, "STOP") {
 			break
+		} else if strings.HasPrefix(line, "//") {
+			out.WriteString("    " + line + "\n")
+			continue
 		}
 		var rule string
 		if strings.HasPrefix(line, "⟨") {
@@ -49,7 +55,9 @@ func TestGen(t *testing.T) {
 	if err := scanner.Err(); err != nil {
 		t.Error(err)
 	}
-	//t.Fail()
+	out.WriteString("}\n")
+	out.Flush()
+	gofile.Close()
 }
 
 func makeRule(lhs string, rhs string) string {

@@ -1,4 +1,5 @@
-⟨S⟩ → ⟨statement list⟩
+# Start symbol will be set by the calling function
+#⟨S⟩ → ⟨statement list⟩ ;
 
 ⟨statement list⟩ → ⟨empty⟩ 
 	| ⟨statement⟩ ; ⟨statement list⟩ 
@@ -154,7 +155,7 @@
 	| ⟨generic suffix⟩  TAG
 	| ⟨generic suffix⟩ []
 
-# --- Commands --------------------------------------------------------------
+// --- Commands --------------------------------------------------------------
 
 ⟨command⟩ → pickup ⟨primary⟩ 
 	| save ⟨symbolic token list⟩ 
@@ -175,9 +176,9 @@
 
 ⟨drawing option⟩ → DrawOption ⟨tertiary⟩ 
 
-# --- Macros ----------------------------------------------------------------
+// --- Macros ----------------------------------------------------------------
 
-⟨macro definition⟩ → def⟨parameter⟩ =
+⟨macro definition⟩ → def ⟨parameter⟩ =
 # rest will be done by scanner
 
 ⟨function definition⟩ → ⟨function heading⟩ = ⟨replacement text⟩ enddef

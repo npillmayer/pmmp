@@ -12,39 +12,38 @@ Copyright © 2017–2021 Norbert Pillmayer <norbert@pillmayer.com>
 
 import (
 	"fmt"
-	"strings"
 	"sync"
-	"unicode"
 
-	"github.com/npillmayer/gorgo/lr/scanner"
 	"github.com/npillmayer/gorgo/terex"
-	"github.com/timtadh/lexmachine"
-	lex "github.com/timtadh/lexmachine"
-	"github.com/timtadh/lexmachine/machines"
 )
+
+type tokType int32
 
 // Token values for operators on different grammar levels
 const (
-	SymTok          int = -9
-	Unsigned        int = -10
-	Signed          int = -11
-	UnaryOp         int = -15
-	NullaryOp       int = -16
-	PrimaryOp       int = -17
-	SecondaryOp     int = -18
-	RelationOp      int = -19
-	AssignOp        int = -20
-	OfOp            int = -21
-	UnaryTransform  int = -22
-	BinaryTransform int = -23
-	PlusOrMinus     int = -24
-	Type            int = -25
-	PseudoOp        int = -26
-	Function        int = -27
-	Join            int = -28
-	DrawCmd         int = -29
-	DrawOption      int = -30
-	Keyword         int = -32
+	String          tokType = -1
+	Ident           tokType = -2
+	SymTok          tokType = -9
+	Unsigned        tokType = -10
+	Signed          tokType = -11
+	UnaryOp         tokType = -15
+	NullaryOp       tokType = -16
+	PrimaryOp       tokType = -17
+	SecondaryOp     tokType = -18
+	RelationOp      tokType = -19
+	AssignOp        tokType = -20
+	OfOp            tokType = -21
+	UnaryTransform  tokType = -22
+	BinaryTransform tokType = -23
+	PlusOrMinus     tokType = -24
+	Type            tokType = -25
+	PseudoOp        tokType = -26
+	Function        tokType = -27
+	Join            tokType = -28
+	DrawCmd         tokType = -29
+	DrawOption      tokType = -30
+	ScalarMulOp     tokType = -31
+	Keyword         tokType = -32 // must be the last one => specific keywords will be `Keyword - n`
 )
 
 // The tokens representing literal one-char lexemes
@@ -64,12 +63,12 @@ var nullOps = []string{
 	"false", "normaldeviate", "nullpen", "nullpicture",
 	"pencircle", "true", "whatever",
 }
-var primOps = []string{`\*`, `\/`, `\*\*`, "and", "dotprod", "div", "mod"}
-var secOps = []string{`\+\+`, `\+\-\+`, "or", "intersectionpoint"}
-var sign = []string{`\+`, `\-`}
+var primOps = []string{`*`, `/`, `**`, "and", "dotprod", "div", "mod"}
+var secOps = []string{`++`, `+-+`, "or", "intersectionpoint"}
+var sign = []string{`+`, `-`}
 var relOps = []string{
 	`==`, `<`, `>`, `≤`, `≥`, `≠`, `<=`, `>=`, `!=`, `<>`,
-	`\&`, "cutbefore", "cutafter",
+	`&`, "cutbefore", "cutafter",
 }
 var assignOps = []string{`:=`, `←`}
 var ofOps = []string{
@@ -87,7 +86,7 @@ var funcs = []string{
 	"min", "max", "incr", "decr",
 }
 var join = []string{
-	`--`, `\.\.`, `\.\.\.`, `---`,
+	`--`, `..`, `...`, `---`,
 }
 var drawcmd = []string{
 	"draw", "fill", "filldraw", "undraw", "unfill", "unfilldraw",
@@ -101,114 +100,116 @@ var drawopt = []string{
 // The keyword tokens
 var keywords = []string{ // TODO
 	"of",
-	`\[\]`,
+	`[]`,
 	"begingroup", "endgroup",
 	"picture", "end",
 	"tension", "and", "controls", "curl",
 	"pickup", "save", "show",
-	"def", "vardef", "enddef", "XXX",
+	"def", "vardef", "enddef",
 	"expr", "suffix",
 	"primary", "secondary", "tertiary",
 	"primarydef", "secondarydef", "tertiarydef",
+	"if", "fi", "else:", "elseif",
+	"for", "endfor", "forsuffixes", "forever", "upto", "downto", "step", "until",
 }
 
 // All of the tokens (including literals and keywords)
-var tokens = []string{
-	"COMMENT", "TAG", "NUMBER", "STRING",
-}
+// var tokens = []string{
+// 	"COMMENT", "TAG", "NUMBER", "STRING",
+// }
 
-// tokenIds will be set in initTokens()
-var tokenIds map[string]int // A map from the token names to their int ids
+// tokenTypeFromLexeme will be set in initTokens()
+var tokenTypeFromLexeme map[string]tokType // A map from the token names to their int ids
 
 var initOnce sync.Once // monitors one-time initialization
 
 func initTokens() {
 	initOnce.Do(func() {
-		tokenIds = make(map[string]int)
-		tokenIds["COMMENT"] = scanner.Comment
-		tokenIds["TAG"] = scanner.Ident
-		tokenIds["STRING"] = scanner.String
-		tokenIds["NUMBER"] = scanner.Float
-		tokenIds["Signed"] = Signed
-		tokenIds["Unsigned"] = Unsigned
-		tokenIds["SymTok"] = SymTok
-		tokenIds["NullaryOp"] = NullaryOp
-		tokenIds["UnaryOp"] = UnaryOp
-		tokenIds["PrimaryOp"] = PrimaryOp
-		tokenIds["SecondaryOp"] = SecondaryOp
-		tokenIds["RelationOp"] = RelationOp
-		tokenIds["AssignOp"] = AssignOp
-		tokenIds["OfOp"] = OfOp
-		tokenIds["UnaryTransform"] = UnaryTransform
-		tokenIds["BinaryTransform"] = BinaryTransform
-		tokenIds["PlusOrMinus"] = PlusOrMinus
-		tokenIds["Type"] = Type
-		tokenIds["Function"] = Function
-		tokenIds["Join"] = Join
-		tokenIds["DrawCmd"] = DrawCmd
-		tokenIds["DrawOption"] = DrawOption
-		tokenIds["Keyword"] = Keyword
-		tokenIds["PseudoOp"] = PseudoOp
+		tokenTypeFromLexeme = make(map[string]tokType)
+		// tokenIds["COMMENT"] = scanner.Comment
+		// tokenIds["TAG"] = scanner.Ident
+		// tokenIds["STRING"] = scanner.String
+		// tokenIds["NUMBER"] = scanner.Float
+		// tokenIds["Signed"] = Signed
+		// tokenIds["Unsigned"] = Unsigned
+		// tokenIds["SymTok"] = SymTok
+		// tokenIds["NullaryOp"] = NullaryOp
+		// tokenIds["UnaryOp"] = UnaryOp
+		// tokenIds["PrimaryOp"] = PrimaryOp
+		// tokenIds["SecondaryOp"] = SecondaryOp
+		// tokenIds["RelationOp"] = RelationOp
+		// tokenIds["AssignOp"] = AssignOp
+		// tokenIds["OfOp"] = OfOp
+		// tokenIds["UnaryTransform"] = UnaryTransform
+		// tokenIds["BinaryTransform"] = BinaryTransform
+		// tokenIds["PlusOrMinus"] = PlusOrMinus
+		// tokenIds["Type"] = Type
+		// tokenIds["Function"] = Function
+		// tokenIds["Join"] = Join
+		// tokenIds["DrawCmd"] = DrawCmd
+		// tokenIds["DrawOption"] = DrawOption
+		// tokenIds["Keyword"] = Keyword
+		// tokenIds["PseudoOp"] = PseudoOp
 		for _, lit := range literals {
 			r := lit[0]
-			tokenIds[lit] = int(r)
+			tokenTypeFromLexeme[lit] = tokType(r)
 		}
 		for _, op := range nullOps {
-			tokenIds[op] = NullaryOp
+			tokenTypeFromLexeme[op] = NullaryOp
 		}
 		for _, op := range unaryOps {
-			tokenIds[op] = UnaryOp
+			tokenTypeFromLexeme[op] = UnaryOp
 		}
 		for _, op := range primOps {
-			tokenIds[op] = PrimaryOp
+			tokenTypeFromLexeme[op] = PrimaryOp
 		}
 		for _, op := range secOps {
-			tokenIds[op] = SecondaryOp
+			tokenTypeFromLexeme[op] = SecondaryOp
 		}
 		for _, op := range relOps {
-			tokenIds[op] = RelationOp
+			tokenTypeFromLexeme[op] = RelationOp
 		}
 		for _, op := range assignOps {
-			tokenIds[op] = AssignOp
+			tokenTypeFromLexeme[op] = AssignOp
 		}
 		for _, op := range ofOps {
-			tokenIds[op] = OfOp
+			tokenTypeFromLexeme[op] = OfOp
 		}
 		for _, tr := range unTransf {
-			tokenIds[tr] = UnaryTransform
+			tokenTypeFromLexeme[tr] = UnaryTransform
 		}
 		for _, tr := range binTransf {
-			tokenIds[tr] = BinaryTransform
+			tokenTypeFromLexeme[tr] = BinaryTransform
 		}
 		for _, s := range sign {
-			tokenIds[s] = PlusOrMinus
+			tokenTypeFromLexeme[s] = PlusOrMinus
 		}
 		for _, t := range types {
-			tokenIds[t] = Type
+			tokenTypeFromLexeme[t] = Type
 		}
 		for _, f := range funcs {
-			tokenIds[f] = Function
+			tokenTypeFromLexeme[f] = Function
 		}
 		for _, d := range drawcmd {
-			tokenIds[d] = DrawCmd
+			tokenTypeFromLexeme[d] = DrawCmd
 		}
 		for _, d := range drawopt {
-			tokenIds[d] = DrawOption
+			tokenTypeFromLexeme[d] = DrawOption
 		}
 		for _, j := range join {
-			tokenIds[j] = Join
-			tokenIds[unescape(j)] = Join
+			tokenTypeFromLexeme[j] = Join
+			//tokenIds[unescape(j)] = Join
 		}
 		for i, k := range keywords {
-			tokenIds[k] = Keyword - i
-			tokenIds[unescape(k)] = Keyword - i
+			tokenTypeFromLexeme[k] = Keyword - tokType(i)
+			//tokenIds[unescape(k)] = Keyword - i
 		}
 	})
 }
 
-// Token returns a token name and its value.
-func Token(t string) (string, int) {
-	id, ok := tokenIds[t]
+// Token returns a token name and its token type.
+func Token(t string) (string, tokType) {
+	id, ok := tokenTypeFromLexeme[t]
 	if !ok {
 		panic(fmt.Errorf("unknown token: %s", t))
 	}
@@ -216,9 +217,10 @@ func Token(t string) (string, int) {
 }
 
 // Lexer creates a new lexmachine lexer for the MetaPost language.
+/*
 func Lexer() (*scanner.LMAdapter, error) {
 	initTokens()
-	init := func(lexer *lexmachine.Lexer) {
+	init := func(lexer *lex.Lexer) {
 		lexer.Add([]byte(`%[^\n]*\n?`), scanner.Skip) // skip comments
 		lexer.Add([]byte(`\"[^"]*\"`), makeToken("STRING"))
 		//lexer.Add([]byte(`[\+\-]\d+(\.\d+)?`), makeToken("Signed")) // float
@@ -251,30 +253,38 @@ func Lexer() (*scanner.LMAdapter, error) {
 	}
 	return adapter, nil
 }
+*/
 
-func makeToken(s string) lexmachine.Action {
+/*
+func makeToken(s string) lex.Action {
 	id, ok := tokenIds[s]
 	if !ok {
 		panic(fmt.Errorf("unknown token: %s", s))
 	}
 	return scanner.MakeToken(s, id)
 }
+*/
 
-func makeSymbol() lexmachine.Action {
+/*
+func makeSymbol() lex.Action {
 	return func(s *lex.Scanner, m *machines.Match) (interface{}, error) {
 		lexeme := string(m.Bytes)
-		if t, ok := tokenIds[lexeme]; ok { // is a keyword
+		if t, ok := tokenTypeFromLexeme[lexeme]; ok { // is a keyword
 			return s.Token(t, lexeme, m), nil
 		}
-		return s.Token(tokenIds["TAG"], lexeme, m), nil
+		return s.Token(tokenTypeFromLexeme["TAG"], lexeme, m), nil
 	}
 }
+*/
 
 // S creates a grammar terminal name and the corresponding token value for given
 // lexeme. Checks if lexeme is a reserved keyword.
+//
+// This is used during grammar building.
+//
 func S(lexeme string) (string, int) {
-	if t, ok := tokenIds[lexeme]; ok { // is a keyword
-		return lexeme, t
+	if t, ok := tokenTypeFromLexeme[lexeme]; ok { // is a keyword
+		return lexeme, int(t)
 	}
 	panic(fmt.Sprintf("did not find token value for lexeme '%s'", lexeme))
 	//return lexeme, tokenIds["TAG"] // this should not happen
@@ -286,6 +296,7 @@ func S(lexeme string) (string, int) {
 //     | −
 //     | ⟨‘ ⟨number or fraction⟩ ’ not followed by ‘ ⟨add op⟩  ⟨number⟩ ’⟩
 //
+/*
 func numberToken(s *lex.Scanner, m *machines.Match) (interface{}, error) {
 	lexeme := string(m.Bytes)
 	for tc := s.TC; tc < len(s.Text); tc++ { // do not change s.TC
@@ -293,22 +304,24 @@ func numberToken(s *lex.Scanner, m *machines.Match) (interface{}, error) {
 			continue
 		}
 		if unicode.IsLetter(rune(s.Text[tc])) {
-			return s.Token(tokenIds["ScalarMulOp"], lexeme, m), nil
+			return s.Token(tokenTypeFromLexeme["ScalarMulOp"], lexeme, m), nil
 		}
 		break
 	}
-	return s.Token(tokenIds["NUMBER"], lexeme, m), nil
+	return s.Token(tokenTypeFromLexeme["NUMBER"], lexeme, m), nil
 }
+*/
 
 // makeLMToken creates an ad-hoc terminal token.
 // Use like this:
 //
 //     makeLMToken("PrimaryOp", "*")
 //
+/*
 func makeLMToken(tokcat string, lexeme string) *terex.Token {
-	lmtok := &lexmachine.Token{
+	lmtok := &lex.Token{
 		Lexeme: []byte(lexeme),
-		Type:   tokenIds[tokcat],
+		Type:   tokenTypeFromLexeme[tokcat],
 		Value:  nil,
 	}
 	return &terex.Token{
@@ -317,7 +330,13 @@ func makeLMToken(tokcat string, lexeme string) *terex.Token {
 		Value: lexeme,
 	}
 }
+*/
+func makeLMToken(tokcat string, lexeme string) *terex.Token {
+	panic("TODO: create tokens during term rewriting")
+}
 
+/*
 func unescape(s string) string {
 	return strings.ReplaceAll(s, `\`, "")
 }
+*/
