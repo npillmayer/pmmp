@@ -19,10 +19,12 @@ import (
 
 type tokType int32
 
+//go:generate stringer -type tokType
 // Token values for operators on different grammar levels
 const (
 	String          tokType = -1
 	Ident           tokType = -2
+	Literal         tokType = -3
 	SymTok          tokType = -9
 	Unsigned        tokType = -10
 	Signed          tokType = -11
@@ -43,7 +45,8 @@ const (
 	DrawCmd         tokType = -29
 	DrawOption      tokType = -30
 	ScalarMulOp     tokType = -31
-	Keyword         tokType = -32 // must be the last one => specific keywords will be `Keyword - n`
+	MacroDef        tokType = -32
+	Keyword         tokType = -33 // must be the last one => specific keywords will be `Keyword - n`
 )
 
 // The tokens representing literal one-char lexemes

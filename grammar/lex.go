@@ -30,19 +30,21 @@ func NewLexer(reader io.RuneReader) *lexer {
 	return l
 }
 
-func makeToken(state scstate, lexeme string) terex.Token {
+func makeToken(state scstate, lexeme string) (tokType, terex.Token) {
 	// lmtok := &lex.Token{
 	// 	Lexeme: []byte(lexeme),
 	// 	Type:   tokenIds[tokcat],
 	// 	Value:  nil,
 	// }
-	toktype := tokval4state[state-accept_string]
+	toktype := tokval4state[state-accepting_states]
 	if toktype == Ident {
 		if id, ok := tokenTypeFromLexeme[lexeme]; ok {
 			toktype = id
 		}
+	} else if toktype == Literal {
+		toktype = tokType(lexeme[0])
 	}
-	return terex.Token{
+	return toktype, terex.Token{
 		Name:    lexeme,
 		TokType: int(toktype),
 		Token:   lexeme, // TODO -> need more info?
@@ -55,16 +57,15 @@ func makeToken(state scstate, lexeme string) terex.Token {
 //     | −
 //     | ⟨‘ ⟨number or fraction⟩ ’ not followed by ‘ ⟨add op⟩  ⟨number⟩ ’⟩
 //
-func (l *lexer) numberToken(lexeme string) terex.Token {
-	r, _, err := l.peek()
-	if err != nil || !unicode.IsLetter(r) {
-		return terex.Token{
+func numberToken(lexeme string, la rune) (tokType, terex.Token) {
+	if !unicode.IsLetter(la) {
+		return Unsigned, terex.Token{
 			Name:    lexeme,
 			TokType: int(Unsigned),
 			Value:   unsignedValue(lexeme),
 		}
 	}
-	return terex.Token{
+	return ScalarMulOp, terex.Token{
 		Name:    lexeme,
 		TokType: int(ScalarMulOp),
 		Value:   unsignedValue(lexeme),
@@ -109,24 +110,28 @@ func (l *lexer) NextToken(expected []int) (tokval int, token interface{}, start,
 	}
 	for {
 		r, sz, err = l.peek()
-		if err != nil && err != io.EOF {
+		if err != nil && (err != io.EOF || r == 0) {
 			return 0, nil, l.pos, l.pos
 		}
 		newstate := nextState(l.state, r)
-		if !mustBacktrack(newstate) {
+		if !mustBacktrack(newstate) && newstate != 0 {
 			l.match(r)
 			l.length += uint64(sz)
 		}
 		l.state = newstate
 		if isAccept(newstate) {
-			tokval = int(tokval4state[newstate])
+			var t tokType
 			if newstate == accept_fraction_bt || newstate == accept_unsigned_bt {
-				token = l.numberToken(l.lexeme.String())
+				t, token = numberToken(l.lexeme.String(), r)
+				tokval = int(t)
 			} else {
-				token = makeToken(newstate, l.lexeme.String())
+				t, token = makeToken(newstate, l.lexeme.String())
+				tokval = int(t)
 			}
+			tracer().Debugf("MetaPost lexer accepting %s", t.String())
 			start, length = l.start, l.length
 			l.start += length
+			l.lexeme.Reset()
 			return
 		}
 	}
@@ -137,6 +142,9 @@ func (l *lexer) SetErrorHandler(h func(error)) {
 }
 
 func (l *lexer) peek() (r rune, sz int, err error) {
+	if l.isEof {
+		return 0, 0, io.EOF
+	}
 	if l.lookahead.la != 0 {
 		r = l.lookahead.la
 		tracer().Debugf("read LA %#U", r)
@@ -150,6 +158,7 @@ func (l *lexer) peek() (r rune, sz int, err error) {
 	if err == io.EOF {
 		tracer().Debugf("EOF for MetaPost input")
 		l.isEof = true
+		r = 1 // TODO this should be 'illegal rune'
 		return
 	} else if err != nil {
 		return 0, 0, err
@@ -167,12 +176,12 @@ func (l *lexer) match(r rune) {
 		l.lookahead.la = 0
 		return
 	}
-	r, sz, err := l.input.ReadRune()
-	l.lookahead.la = r
-	l.lookahead.sz = sz
-	if err == io.EOF {
-		l.isEof = true
-	}
+	// r, sz, err := l.input.ReadRune()
+	// l.lookahead.la = r
+	// l.lookahead.sz = sz
+	// if err == io.EOF {
+	// 	l.isEof = true
+	// }
 }
 
 type token int
@@ -193,28 +202,52 @@ const (
 	state_frac
 	state_denom
 	state_macrodef
+	state_symtok
+	state_dash
+	state_ddash
+	state_dot
+	state_ddot
+	state_equals
+	state_lt
+	state_gt
+	state_ast
 
-	accept_string // do not change sequence, used as a maker
+	accepting_states // do not change sequence, used as a maker
+	accept_string
 	accept_word
 	accept_comment
+	accept_literal
+	accept_dddash
+	accept_dddot
+	accept_relop
+	accept_primop
+	accept_macro_def
 
 	accept_word_bt // do not change sequence
 	accept_unsigned_bt
 	accept_fraction_bt
+	accept_symtok_bt
+	accept_minus_bt
+	accept_primop_bt
+	accept_ddash_bt
+	accept_ddot_bt
+	max_accepting_states // do not change sequence, used as a marker
 
 	state_err // must be last
 )
 
+// callers need to subtract `accepting_states`
 var tokval4state = []tokType{
-	String, Ident, 0, Ident, Unsigned, Unsigned,
+	0, String, Ident, 0, Literal, Join, Join, RelationOp, PrimaryOp, MacroDef,
+	Ident, Unsigned, Unsigned, SymTok, PlusOrMinus, PrimaryOp, Join, Join,
 }
 
 func mustBacktrack(s scstate) bool {
-	return s >= accept_word_bt && s <= accept_fraction_bt
+	return s >= accept_word_bt && s < max_accepting_states
 }
 
 func isAccept(s scstate) bool {
-	return s >= accept_string && s <= accept_fraction_bt
+	return s > accepting_states && s < max_accepting_states
 }
 
 func nextState(s scstate, r rune) scstate {
@@ -239,9 +272,6 @@ func nextState(s scstate, r rune) scstate {
 	case state_w:
 		if unicode.IsLetter(r) || r == '\'' {
 			return state_w
-		}
-		if r == '.' {
-			return accept_word
 		}
 		return accept_word_bt
 	case state_s:
@@ -282,12 +312,80 @@ func nextState(s scstate, r rune) scstate {
 		}
 		return accept_fraction_bt
 	}
-	return state_start
+	return charState(s, r)
 }
 
 func charState(s scstate, r rune) scstate {
-	switch r {
-	case '-':
+	switch s {
+	case state_start:
+		switch r {
+		case ';', '(', ')', '[', ']', '{', '}', ',':
+			return accept_literal
+		case '≤', '≥', '≠':
+			return accept_relop
+		case '=':
+			return state_equals
+		case '<':
+			return state_lt
+		case '>':
+			return state_gt
+		case '#', '&', '@', '$':
+			return state_symtok
+		case '-':
+			return state_dash
+		case '*':
+			return state_ast
+		case '.':
+			return state_dot
+		}
+	case state_equals:
+		if r == '=' {
+			return accept_relop
+		}
+		return accept_literal
+	case state_lt:
+		if r == '=' {
+			return accept_relop
+		} else if r == '>' {
+			return accept_relop
+		}
+		return accept_literal
+	case state_gt:
+		if r == '=' {
+			return accept_relop
+		}
+		return accept_literal
+	case state_dash:
+		switch r {
+		case '-':
+			return state_ddash
+		case '>':
+			return accept_macro_def
+		default:
+			return accept_minus_bt
+		}
+	case state_dot:
+		switch r {
+		case '.':
+			return state_ddot
+		}
+		return 0 // single dot is space
+	case state_ddot:
+		if r == '.' {
+			return accept_dddot
+		}
+		return accept_ddot_bt
+	case state_ast:
+		if r == '*' {
+			return accept_primop
+		}
+		return accept_primop_bt
+	case state_symtok:
+		switch r {
+		case '#', '@', '$':
+			return state_symtok
+		}
+		return accept_symtok_bt
 	}
 	return 0
 }

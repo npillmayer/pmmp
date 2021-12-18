@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/schuko/tracing/gotestingadapter"
 )
 
@@ -47,7 +48,7 @@ func TestMakeToken(t *testing.T) {
 		{state: accept_word_bt, s: "true", tok: NullaryOp},
 		{state: accept_word_bt, s: "min", tok: Function},
 	} {
-		if token := makeToken(x.state, x.s); token.TokType != int(x.tok) {
+		if toktype, _ := makeToken(x.state, x.s); toktype != x.tok {
 			t.Errorf("test %d failed: %v", i, x)
 		}
 	}
@@ -109,6 +110,41 @@ func TestLexerPredicate(t *testing.T) {
 	}
 	if !mustBacktrack(accept_word_bt) {
 		t.Errorf("state %d unexpectedly flagged to not need backtracking", accept_word_bt)
+	}
+}
+
+func TestLexerNextToken(t *testing.T) {
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
+	defer teardown()
+	//
+	initTokens()
+	var expect = []tokType{
+		tokenTypeFromLexeme["begingroup"],
+		SymTok, Type, Unsigned, String, Ident, Ident, Unsigned, PrimaryOp, Join, ';', OfOp,
+	}
+	input := `begingroup @# boolean 1 "hello" a.l 1/23 ** ... ; point % ignored`
+	//input := `@# 1 ;`
+	lex := NewLexer(bufio.NewReader(strings.NewReader(input)))
+	var cats []tokType
+	var lexemes []string
+	for !lex.isEof {
+		cat, token, _, _ := lex.NextToken(nil)
+		t.Logf("cat = %s, token = %v", tokType(cat), token)
+		cats = append(cats, tokType(cat))
+		if token == nil {
+			lexemes = append(lexemes, "<nil>")
+		} else {
+			lexemes = append(lexemes, token.(terex.Token).Name)
+		}
+	}
+	for i, tok := range expect {
+		if i >= len(cats) {
+			t.Fatalf("expected %d tokens, have %d", len(expect), len(cats))
+		}
+		if tok != cats[i] {
+			t.Logf("lexeme #%d = %q", i, lexemes[i])
+			t.Errorf("expected %q, have %q", tok, cats[i])
+		}
 	}
 }
 
