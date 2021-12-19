@@ -123,7 +123,6 @@ func TestLexerNextToken(t *testing.T) {
 		SymTok, Type, Unsigned, String, Ident, Ident, Unsigned, PrimaryOp, Join, ';', OfOp,
 	}
 	input := `begingroup @# boolean 1 "hello" a.l 1/23 ** ... ; point % ignored`
-	//input := `@# 1 ;`
 	lex := NewLexer(bufio.NewReader(strings.NewReader(input)))
 	var cats []tokType
 	var lexemes []string
@@ -144,6 +143,25 @@ func TestLexerNextToken(t *testing.T) {
 		if tok != cats[i] {
 			t.Logf("lexeme #%d = %q", i, lexemes[i])
 			t.Errorf("expected %q, have %q", tok, cats[i])
+		}
+	}
+}
+
+func TestLexerMacroDef(t *testing.T) {
+	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
+	defer teardown()
+	//
+	input := "-> Hello World enddef !"
+	lex := NewLexer(bufio.NewReader(strings.NewReader(input)))
+	cat, token, err := lex.storeReplacementText()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cat != MacroDef {
+		t.Logf("cat = %s, token = %v", cat.String(), token)
+		t.Error("unexpected token category")
+		if token.Value != "-> Hello World " {
+			t.Error("unexpected token lexeme")
 		}
 	}
 }

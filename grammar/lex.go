@@ -101,6 +101,55 @@ func unsignedValue(s string) float64 {
 	return f
 }
 
+func (l *lexer) storeReplacementText() (tokType, terex.Token, error) {
+	// precondition: we just have read a '->'
+	// todo: store text until "enddef" token found
+	l.lexeme.Reset() // drop the '->'
+	var r rune
+	var totalsz, sz int
+	var err error
+	var lexeme string
+	//
+	edeflen := len("enddef")
+	for { // read input until either "enddef" or EOF
+		r, sz, err = l.peek()
+		if err != nil || l.isEof {
+			lexeme = l.lexeme.String()
+			break
+		}
+		l.match(r)
+		totalsz += sz
+		if r == 'f' {
+			tracer().Debugf("@ found 'f'")
+			lxm := l.lexeme.Bytes()
+			tracer().Debugf("@ lexeme = %q", string(lxm))
+			length := len(lxm)
+			if length <= edeflen {
+				continue
+			}
+			if isEnddef(lxm[length-edeflen:]) {
+				lexeme = string(lxm[:length-edeflen])
+				break
+			}
+		}
+	}
+	return MacroDef, terex.Token{
+		Name:    lexeme,
+		TokType: int(ScalarMulOp),
+		Value:   lexeme,
+	}, err
+}
+
+func isEnddef(b []byte) bool {
+	enddef := []byte{'e', 'n', 'd', 'd', 'e', 'f'}
+	for i, bb := range b {
+		if bb != enddef[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (l *lexer) NextToken(expected []int) (tokval int, token interface{}, start, length uint64) {
 	var r rune
 	var sz int
@@ -123,11 +172,15 @@ func (l *lexer) NextToken(expected []int) (tokval int, token interface{}, start,
 			var t tokType
 			if newstate == accept_fraction_bt || newstate == accept_unsigned_bt {
 				t, token = numberToken(l.lexeme.String(), r)
-				tokval = int(t)
+			} else if newstate == accept_macro_def {
+				if t, token, err = l.storeReplacementText(); err != nil {
+					tracer().Errorf("MetaPost syntax error: %s", err)
+					// TODO make token an error token
+				}
 			} else {
 				t, token = makeToken(newstate, l.lexeme.String())
-				tokval = int(t)
 			}
+			tokval = int(t)
 			tracer().Debugf("MetaPost lexer accepting %s", t.String())
 			start, length = l.start, l.length
 			l.start += length
