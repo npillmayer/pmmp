@@ -30,6 +30,7 @@ const (
 	cat13                // "
 	cat14                // digit
 	cat15                // %
+	catNL
 	catErr
 )
 
@@ -310,9 +311,11 @@ const (
 
 	accepting_states // do not change sequence, used as a maker
 	accept_string
-	accept_word
+	accept_unsigned
+	accept_symtok
 	accept_comment
 	accept_literal
+	accept_word
 	accept_dddash
 	accept_dddot
 	accept_relop
@@ -411,17 +414,70 @@ func nextState(s scstate, r rune) scstate {
 	return charState(s, r)
 }
 
-func (l *lexer) charseq(s scstate, r rune) (c catcode, sz int, err error) {
-	c = cat(r)
-	cc := c
+type catseq struct {
+	c  catcode
+	l  int
+	sz int
+}
+
+func (l *lexer) next(s scstate, csq catseq) scstate {
+	if s == state_err {
+		return s
+	}
+	switch s {
+	case state_start:
+		if csq.c <= cat12 {
+			return accept_symtok
+		}
+		switch csq.c {
+		case cat13: // "
+			return state_s
+		case cat14: // digit
+			return state_num
+		case cat15: // %
+			return state_c
+		}
+	case state_s:
+		if csq.c == cat13 {
+			return accept_string
+		} else if csq.c == catNL {
+			return state_err
+		}
+		return state_s
+	case state_num:
+		if csq.c == cat11 { // .
+			return state_frac
+		} else if csq.c == cat4 { // /
+			return state_denom
+		}
+		return accept_unsigned
+	case state_c:
+		if csq.c == catNL {
+			return state_start
+		}
+		return state_c
+	}
+	panic("unknown scanner state")
+}
+
+func (l *lexer) charseq(s scstate, r rune) (csq catseq, err error) {
+	csq.c = cat(r)
+	cc := csq.c
 	var z int
-	for cc == c {
+	if csq.c == cat12 { // cat 12 are loners
+		csq.sz = 1
+		csq.l = 1
+		return
+	}
+	for cc == csq.c {
 		r, z, err = l.peek()
-		sz += z
+		csq.sz += z
+		csq.l++
 		if err != nil && (err != io.EOF || r == 0) {
 			return
 		}
 		cc = cat(r)
+		l.match(r)
 	}
 	return
 }
