@@ -11,6 +11,49 @@ import (
 	"github.com/npillmayer/gorgo/terex"
 )
 
+type catcode uint8
+
+const (
+	cat0  catcode = iota // letter
+	cat1                 // <=>:|
+	cat2                 // `'´
+	cat3                 // +-
+	cat4                 // /*\
+	cat5                 // !?
+	cat6                 // #&@$
+	cat7                 // ^~
+	cat8                 // [
+	cat9                 // ]
+	cat10                // {}
+	cat11                // .
+	cat12                // , ; ( )
+	cat13                // "
+	cat14                // digit
+	cat15                // %
+	catErr
+)
+
+var catcodeTable = []string{
+	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", // use unicode.IsLetter
+	`<=>:|`, "`'", `+-`, `/*\`, `!?`, `#&@$`, `^~`, `[`, `]`, `{}`, `.`, `,;()`, `"`,
+	"0123456789", `%`,
+}
+
+func cat(r rune) catcode {
+	if unicode.IsLetter(r) {
+		return cat0
+	}
+	if unicode.IsDigit(r) {
+		return cat14
+	}
+	for c, cat := range catcodeTable {
+		if strings.ContainsRune(cat, r) {
+			return catcode(c)
+		}
+	}
+	return catErr
+}
+
 type lexer struct {
 	input         io.RuneReader
 	state         scstate
@@ -366,6 +409,21 @@ func nextState(s scstate, r rune) scstate {
 		return accept_fraction_bt
 	}
 	return charState(s, r)
+}
+
+func (l *lexer) charseq(s scstate, r rune) (c catcode, sz int, err error) {
+	c = cat(r)
+	cc := c
+	var z int
+	for cc == c {
+		r, z, err = l.peek()
+		sz += z
+		if err != nil && (err != io.EOF || r == 0) {
+			return
+		}
+		cc = cat(r)
+	}
+	return
 }
 
 func charState(s scstate, r rune) scstate {
