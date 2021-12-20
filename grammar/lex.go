@@ -66,7 +66,7 @@ type lexer struct {
 
 func NewLexer(reader io.RuneReader) *lexer {
 	l := &lexer{}
-	l.stream.reader = reader
+	l.stream.reader = &nestedReader{reader: reader}
 	return l
 }
 

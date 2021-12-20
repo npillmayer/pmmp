@@ -168,8 +168,6 @@ github.com/modern-go/reflect2 v1.0.1/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3Rllmb
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/npillmayer/arithm v0.1.0 h1:cCRdtiIlfhB37CEDuaxJBnbdLNiwCbZB06/u5uCwKMc=
 github.com/npillmayer/arithm v0.1.0/go.mod h1:fJv4YQy070qj7eVD0EW4o2HQ1gCYG6GEwwgUMXfxits=
-github.com/npillmayer/gorgo v0.2.0-alpha.1 h1:grHANnc+i/dsh/C5Z6ULS5/zmgZ20eQDOkTmtDn9kiQ=
-github.com/npillmayer/gorgo v0.2.0-alpha.1/go.mod h1:ll1yUArBfbeFMsl3e4wbz3w6aMNhXzlvEqGvkDEY2N8=
 github.com/npillmayer/gotype v0.0.0-20201204061902-df8e6285672b/go.mod h1:jm4sKGTCR4s92km7y8iLZTO2qtwe15lW0xaQTWItjc4=
 github.com/npillmayer/nestext v0.1.3/go.mod h1:h2lrijH8jpicr25dFY+oAJLyzlya6jhnuG+zWp9L0Uk=
 github.com/npillmayer/schuko v0.1.0/go.mod h1:ZBwSZ3NU/4nLac7UPWGLw+W1fzAUj0iRViGjoS9j+Q0=
