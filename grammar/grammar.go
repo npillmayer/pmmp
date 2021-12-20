@@ -24,7 +24,6 @@ var startOnce sync.Once // monitors one-time creation of grammar and lexer
 
 var mpGrammar *lr.LRAnalysis
 var mpLexer *scanner.LMAdapter
-var myLexer *lexer
 
 func initGlobalGrammar() {
 	startOnce.Do(func() {

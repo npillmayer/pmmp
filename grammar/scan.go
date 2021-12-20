@@ -70,7 +70,7 @@ var primOps = []string{`*`, `/`, `**`, "and", "dotprod", "div", "mod"}
 var secOps = []string{`++`, `+-+`, "or", "intersectionpoint"}
 var sign = []string{`+`, `-`}
 var relOps = []string{
-	`==`, `<`, `>`, `≤`, `≥`, `≠`, `<=`, `>=`, `!=`, `<>`,
+	`==`, `<`, `>`, `≤`, `≥`, `≠`, `<=`, `>=`, `<>`,
 	`&`, "cutbefore", "cutafter",
 }
 var assignOps = []string{`:=`, `←`}

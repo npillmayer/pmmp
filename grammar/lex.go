@@ -1,7 +1,6 @@
 package grammar
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"strconv"
@@ -11,11 +10,13 @@ import (
 	"github.com/npillmayer/gorgo/terex"
 )
 
+// --- Category codes --------------------------------------------------------
+
 type catcode uint8
 
 const (
 	cat0  catcode = iota // letter
-	cat1                 // <=>:|
+	cat1                 // <=>:|≤≠≥
 	cat2                 // `'´
 	cat3                 // +-
 	cat4                 // /*\
@@ -36,7 +37,7 @@ const (
 
 var catcodeTable = []string{
 	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", // use unicode.IsLetter
-	`<=>:|`, "`'", `+-`, `/*\`, `!?`, `#&@$`, `^~`, `[`, `]`, `{}`, `.`, `,;()`, `"`,
+	`<=>:|≤≠≥`, "`'", `+-`, `/*\`, `!?`, `#&@$`, `^~`, `[`, `]`, `{}`, `.`, `,;()`, `"`,
 	"0123456789", `%`,
 }
 
@@ -55,24 +56,33 @@ func cat(r rune) catcode {
 	return catErr
 }
 
+// --- Lexer -----------------------------------------------------------------
+
 type lexer struct {
-	input         io.RuneReader
-	state         scstate
-	pos           uint64
-	start, length uint64 // as bytes index
-	lexeme        bytes.Buffer
-	lookahead     struct {
-		la rune
-		sz int
-	}
-	isEof      bool
+	state      scstate
+	stream     runeStream
 	errHandler func(error)
 }
 
 func NewLexer(reader io.RuneReader) *lexer {
-	l := &lexer{input: reader}
+	l := &lexer{}
+	l.stream.reader = reader
 	return l
 }
+
+func (l *lexer) SetErrorHandler(h func(error)) {
+	l.errHandler = h
+}
+
+func (l *lexer) handleError(err error) {
+	if l.errHandler != nil {
+		l.errHandler(err)
+		return
+	}
+	tracer().Errorf("MP scanner error: %s", err.Error())
+}
+
+// --- Token -----------------------------------------------------------------
 
 func makeToken(state scstate, lexeme string) (tokType, terex.Token) {
 	// lmtok := &lex.Token{
@@ -148,24 +158,22 @@ func unsignedValue(s string) float64 {
 func (l *lexer) storeReplacementText() (tokType, terex.Token, error) {
 	// precondition: we just have read a '->'
 	// todo: store text until "enddef" token found
-	l.lexeme.Reset() // drop the '->'
+	l.stream.ResetOutput() // drop the '->'
 	var r rune
-	var totalsz, sz int
 	var err error
 	var lexeme string
 	//
 	edeflen := len("enddef")
 	for { // read input until either "enddef" or EOF
-		r, sz, err = l.peek()
-		if err != nil || l.isEof {
-			lexeme = l.lexeme.String()
+		r, err = l.stream.lookahead()
+		if err != nil || l.stream.isEof {
+			lexeme = l.stream.OutputString()
 			break
 		}
-		l.match(r)
-		totalsz += sz
-		if r == 'f' {
+		l.stream.match(r)
+		if r == 'f' { // enddef ends with a 'f' -> now compare backwards
 			tracer().Debugf("@ found 'f'")
-			lxm := l.lexeme.Bytes()
+			lxm := l.stream.writer.Bytes()
 			tracer().Debugf("@ lexeme = %q", string(lxm))
 			length := len(lxm)
 			if length <= edeflen {
@@ -185,7 +193,7 @@ func (l *lexer) storeReplacementText() (tokType, terex.Token, error) {
 }
 
 func isEnddef(b []byte) bool {
-	enddef := []byte{'e', 'n', 'd', 'd', 'e', 'f'}
+	var enddef = []byte{'e', 'n', 'd', 'd', 'e', 'f'}
 	for i, bb := range b {
 		if bb != enddef[i] {
 			return false
@@ -195,90 +203,46 @@ func isEnddef(b []byte) bool {
 }
 
 func (l *lexer) NextToken(expected []int) (tokval int, token interface{}, start, length uint64) {
-	var r rune
-	var sz int
-	var err error
-	if l.isEof {
-		return 0, EOF, l.pos, l.pos
+	if l.stream.isEof {
+		return 0, EOF, l.stream.start, l.stream.end
 	}
+	var r rune
+	var err error
+	var csq catseq
 	for {
-		r, sz, err = l.peek()
+		r, err = l.stream.lookahead()
 		if err != nil && (err != io.EOF || r == 0) {
-			return 0, nil, l.pos, l.pos
+			l.handleError(err)
+			return 0, nil, l.stream.end, 0
 		}
-		newstate := nextState(l.state, r)
+		csq, err = nextCategorySequence(&l.stream, l.state, r)
+		if err != nil && (err != io.EOF || r == 0) {
+			return 0, nil, l.stream.end, 0
+		}
+		newstate := next(l.state, csq)
 		if !mustBacktrack(newstate) && newstate != 0 {
-			l.match(r)
-			l.length += uint64(sz)
+			l.stream.match(r)
 		}
 		l.state = newstate
 		if isAccept(newstate) {
 			var t tokType
 			if newstate == accept_fraction_bt || newstate == accept_unsigned_bt {
-				t, token = numberToken(l.lexeme.String(), r)
+				t, token = numberToken(l.stream.OutputString(), r)
 			} else if newstate == accept_macro_def {
 				if t, token, err = l.storeReplacementText(); err != nil {
 					tracer().Errorf("MetaPost syntax error: %s", err)
 					// TODO make token an error token
+					l.handleError(err)
 				}
 			} else {
-				t, token = makeToken(newstate, l.lexeme.String())
+				t, token = makeToken(newstate, l.stream.OutputString())
 			}
 			tokval = int(t)
 			tracer().Debugf("MetaPost lexer accepting %s", t.String())
-			start, length = l.start, l.length
-			l.start += length
-			l.lexeme.Reset()
-			return
+			l.stream.ResetOutput()
+			return tokval, token, l.stream.start, l.stream.Span()
 		}
 	}
-}
-
-func (l *lexer) SetErrorHandler(h func(error)) {
-	l.errHandler = h
-}
-
-func (l *lexer) peek() (r rune, sz int, err error) {
-	if l.isEof {
-		return 0, 0, io.EOF
-	}
-	if l.lookahead.la != 0 {
-		r = l.lookahead.la
-		tracer().Debugf("read LA %#U", r)
-		sz = l.lookahead.sz
-		l.lookahead.la = 0
-		return
-	}
-	r, sz, err = l.input.ReadRune()
-	l.lookahead.la = r
-	l.lookahead.sz = sz
-	if err == io.EOF {
-		tracer().Debugf("EOF for MetaPost input")
-		l.isEof = true
-		r = 1 // TODO this should be 'illegal rune'
-		return
-	} else if err != nil {
-		return 0, 0, err
-	}
-	tracer().Debugf("read rune %#U", r)
-	return
-}
-
-func (l *lexer) match(r rune) {
-	if l.isEof {
-		return
-	}
-	l.lexeme.WriteRune(r)
-	if l.lookahead.la != 0 {
-		l.lookahead.la = 0
-		return
-	}
-	// r, sz, err := l.input.ReadRune()
-	// l.lookahead.la = r
-	// l.lookahead.sz = sz
-	// if err == io.EOF {
-	// 	l.isEof = true
-	// }
 }
 
 type token int
@@ -291,45 +255,43 @@ type scstate int
 
 const (
 	state_start scstate = iota
-	state_s
-	state_w
-	state_c
+	state_string
+	state_symtok
+	state_comment
 	state_num
-	state_ch
 	state_frac
 	state_denom
 	state_macrodef
-	state_symtok
-	state_dash
-	state_ddash
-	state_dot
-	state_ddot
-	state_equals
-	state_lt
-	state_gt
-	state_ast
+	// state_dash
+	// state_ddash
+	// state_dot
+	// state_ddot
+	// state_equals
+	// state_lt
+	// state_gt
+	// state_ast
 
 	accepting_states // do not change sequence, used as a maker
 	accept_string
-	accept_unsigned
+	// accept_unsigned
 	accept_symtok
 	accept_comment
-	accept_literal
-	accept_word
-	accept_dddash
-	accept_dddot
-	accept_relop
-	accept_primop
+	// accept_literal
+	// accept_word
+	// accept_dddash
+	// accept_dddot
+	// accept_relop
+	// accept_primop
 	accept_macro_def
 
-	accept_word_bt // do not change sequence
-	accept_unsigned_bt
+	accept_unsigned_bt // do not change sequence
 	accept_fraction_bt
-	accept_symtok_bt
-	accept_minus_bt
-	accept_primop_bt
-	accept_ddash_bt
-	accept_ddot_bt
+	// accept_word_bt
+	// accept_symtok_bt
+	// accept_minus_bt
+	// accept_primop_bt
+	// accept_ddash_bt
+	// accept_ddot_bt
 	max_accepting_states // do not change sequence, used as a marker
 
 	state_err // must be last
@@ -342,13 +304,82 @@ var tokval4state = []tokType{
 }
 
 func mustBacktrack(s scstate) bool {
-	return s >= accept_word_bt && s < max_accepting_states
+	return s >= accept_unsigned_bt && s < max_accepting_states
 }
 
 func isAccept(s scstate) bool {
 	return s > accepting_states && s < max_accepting_states
 }
 
+type catseq struct {
+	c catcode // catcode of all runes in this sequence
+	l int     // length of sequence in terms of runes
+}
+
+func next(s scstate, csq catseq) scstate {
+	if s == state_err {
+		return s
+	}
+	switch s {
+	case state_start:
+		if csq.c <= cat12 {
+			return accept_symtok
+		}
+		switch csq.c {
+		case cat13: // "
+			return state_string
+		case cat14: // digit
+			return state_num
+		case cat15: // '%'
+			return state_comment
+		}
+	case state_string:
+		if csq.c == cat13 {
+			return accept_string
+		} else if csq.c == catNL {
+			return state_err
+		}
+		return state_string
+	case state_num:
+		if csq.c == cat11 { // '.'
+			return state_frac
+		} else if csq.c == cat4 { // '/'
+			return state_denom
+		}
+		return accept_unsigned_bt
+	case state_comment:
+		if csq.c == catNL {
+			return state_start // ignore comments
+		}
+		return state_comment
+	}
+	panic("unknown scanner state")
+}
+
+// nextCategorySequence reads runes from stream as long as each rune has the same
+// category code.
+func nextCategorySequence(stream *runeStream, s scstate, r rune) (csq catseq, err error) {
+	csq.c = cat(r)
+	cc := csq.c
+	if csq.c == cat12 { // cat 12 are loners
+		csq.l = 1
+		return
+	}
+	for cc == csq.c {
+		r, err = stream.lookahead()
+		csq.l++
+		if err != nil && (err != io.EOF || r == 0) {
+			return
+		}
+		cc = cat(r)
+		stream.match(r)
+	}
+	return
+}
+
+// ---------------------------------------------------------------------------
+
+/*
 func nextState(s scstate, r rune) scstate {
 	switch s {
 	case state_start:
@@ -413,75 +444,9 @@ func nextState(s scstate, r rune) scstate {
 	}
 	return charState(s, r)
 }
+*/
 
-type catseq struct {
-	c  catcode
-	l  int
-	sz int
-}
-
-func (l *lexer) next(s scstate, csq catseq) scstate {
-	if s == state_err {
-		return s
-	}
-	switch s {
-	case state_start:
-		if csq.c <= cat12 {
-			return accept_symtok
-		}
-		switch csq.c {
-		case cat13: // "
-			return state_s
-		case cat14: // digit
-			return state_num
-		case cat15: // %
-			return state_c
-		}
-	case state_s:
-		if csq.c == cat13 {
-			return accept_string
-		} else if csq.c == catNL {
-			return state_err
-		}
-		return state_s
-	case state_num:
-		if csq.c == cat11 { // .
-			return state_frac
-		} else if csq.c == cat4 { // /
-			return state_denom
-		}
-		return accept_unsigned
-	case state_c:
-		if csq.c == catNL {
-			return state_start
-		}
-		return state_c
-	}
-	panic("unknown scanner state")
-}
-
-func (l *lexer) charseq(s scstate, r rune) (csq catseq, err error) {
-	csq.c = cat(r)
-	cc := csq.c
-	var z int
-	if csq.c == cat12 { // cat 12 are loners
-		csq.sz = 1
-		csq.l = 1
-		return
-	}
-	for cc == csq.c {
-		r, z, err = l.peek()
-		csq.sz += z
-		csq.l++
-		if err != nil && (err != io.EOF || r == 0) {
-			return
-		}
-		cc = cat(r)
-		l.match(r)
-	}
-	return
-}
-
+/*
 func charState(s scstate, r rune) scstate {
 	switch s {
 	case state_start:
@@ -556,3 +521,6 @@ func charState(s scstate, r rune) scstate {
 	}
 	return 0
 }
+
+
+*/

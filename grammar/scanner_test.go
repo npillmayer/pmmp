@@ -2,6 +2,7 @@ package grammar
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"strings"
 	"testing"
@@ -42,11 +43,12 @@ func TestMakeToken(t *testing.T) {
 		s     string
 		tok   tokType
 	}{
-		{state: accept_word_bt, s: "a", tok: Ident},
-		{state: accept_word_bt, s: "blabla", tok: Ident},
+		{state: accept_symtok, s: "a", tok: SymTok},
+		{state: accept_symtok, s: "blabla", tok: SymTok},
 		{state: accept_string, s: `"blabla"`, tok: String},
-		{state: accept_word_bt, s: "true", tok: NullaryOp},
-		{state: accept_word_bt, s: "min", tok: Function},
+		{state: accept_symtok, s: "true", tok: NullaryOp},
+		{state: accept_symtok, s: "---", tok: Join},
+		{state: accept_unsigned_bt, s: "123", tok: Unsigned},
 	} {
 		if toktype, _ := makeToken(x.state, x.s); toktype != x.tok {
 			t.Errorf("test %d failed: %v", i, x)
@@ -59,18 +61,21 @@ func TestLexerPeek(t *testing.T) {
 	defer teardown()
 	//
 	input := "test!"
-	lex := NewLexer(bufio.NewReader(strings.NewReader(input)))
+	stream := runeStream{
+		reader: bufio.NewReader(strings.NewReader(input)),
+		writer: bytes.Buffer{},
+	}
 	for i := 0; i < 5; i++ {
-		r, _, err := lex.peek()
+		r, err := stream.lookahead()
 		if err != nil {
 			t.Error(err)
 		}
 		if r != []rune(input)[i] {
 			t.Errorf("expected rune #%d to be %#U, is %#U", i, input[i], r)
 		}
-		lex.match(r)
+		stream.match(r)
 	}
-	r, _, err := lex.peek()
+	r, err := stream.lookahead()
 	if r != 0 || err != io.EOF {
 		t.Logf("r = %#U, err = %q", r, err.Error())
 		t.Error("expected rune to be 0 and error to be EOF; isn't")
@@ -86,13 +91,17 @@ func TestLexerState(t *testing.T) {
 		r     rune
 		next  scstate
 	}{
-		{state: 0, r: 'a', next: state_w},
-		{state: state_w, r: 'b', next: state_w},
-		{state: state_c, r: '\n', next: 0},
-		{state: state_w, r: '\n', next: accept_word_bt},
-		{state: 0, r: '\n', next: 0},
+		{state: state_start, r: 'a', next: state_symtok},
+		{state: state_symtok, r: 'b', next: state_symtok},
+		{state: state_comment, r: '\n', next: state_start},
+		{state: state_symtok, r: '\n', next: accept_symtok},
+		{state: state_start, r: '\n', next: state_start},
 	} {
-		if n := nextState(test.state, test.r); n != test.next {
+		csq := catseq{
+			c: cat(test.r),
+			l: 1,
+		}
+		if n := next(test.state, csq); n != test.next {
 			t.Errorf("test %d failed: %d x %U -> %d expected, was %d", i, test.state, test.r, test.next, n)
 		}
 	}
@@ -102,14 +111,14 @@ func TestLexerPredicate(t *testing.T) {
 	teardown := gotestingadapter.QuickConfig(t, "pmmp.grammar")
 	defer teardown()
 	//
-	if mustBacktrack(state_w) {
-		t.Errorf("state %d unexpectedly flagged to need backtracking", state_w)
+	if mustBacktrack(state_symtok) {
+		t.Errorf("state %d unexpectedly flagged to need backtracking", state_symtok)
 	}
 	if mustBacktrack(accept_comment) {
 		t.Errorf("state %d unexpectedly flagged to need backtracking", accept_comment)
 	}
-	if !mustBacktrack(accept_word_bt) {
-		t.Errorf("state %d unexpectedly flagged to not need backtracking", accept_word_bt)
+	if !mustBacktrack(accept_unsigned_bt) {
+		t.Errorf("state %d unexpectedly flagged to not need backtracking", accept_unsigned_bt)
 	}
 }
 
@@ -126,7 +135,7 @@ func TestLexerNextToken(t *testing.T) {
 	lex := NewLexer(bufio.NewReader(strings.NewReader(input)))
 	var cats []tokType
 	var lexemes []string
-	for !lex.isEof {
+	for !lex.stream.isEof {
 		cat, token, _, _ := lex.NextToken(nil)
 		t.Logf("cat = %s, token = %v", tokType(cat), token)
 		cats = append(cats, tokType(cat))
