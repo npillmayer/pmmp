@@ -1,12 +1,7 @@
 package grammar
 
 import (
-	"bufio"
 	"io"
-	"strings"
-
-	"github.com/npillmayer/gorgo/terex"
-	"github.com/npillmayer/pmmp/sframe"
 )
 
 type nestedReader struct {
@@ -36,6 +31,7 @@ func (nr *nestedReader) Push(rr io.RuneReader) *nestedReader {
 	return subnr
 }
 
+/*
 func (nr *nestedReader) PushMacro(v sframe.Variable, env *terex.Environment) *nestedReader {
 	macro := v.(sframe.Macro)
 	bound := make([]sframe.Variable, 0, len(macro.ArgsList))
@@ -55,3 +51,4 @@ func (nr *nestedReader) PushMacro(v sframe.Variable, env *terex.Environment) *ne
 func bind(sym sframe.TagDecl, env *terex.Environment) sframe.Variable {
 	return sframe.Numeric{}
 }
+*/
