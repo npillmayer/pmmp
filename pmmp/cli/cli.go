@@ -10,7 +10,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -78,12 +77,6 @@ tylot-fonts will interpret the following statements:
   find-font <pattern> | <descriptor> -> find-font : locate and load a font
   inspect <font>                                  : store font for inspection
   font.info                                       : print informations about the inspected font
-  font.table-tags                                 : list table tags of inspected font
-  tag <string>                                    : create a tag from a string
-  font.table <name>                               : retrieve table from inspected font
-  table.fields <table>                            : get top-level fields of a table
-  code-point <char> | <number>                    : create a codepoint
-  glyph-index <codepoint>                         : get the glyph index for a code-point
   glyph.info <glyphindex> | <codepoint>           : print information about a glyph
   show                                            : display visual information
 
@@ -93,7 +86,7 @@ tylot-fonts will interpret the following statements:
 	//fcmd.ElvishInterpreter = termui.NewElvishInterpreter(stdout, stderr)
 	// TODO
 	//fcmd.ElvishInterpreter = nil
-	fcmd.addSubcmdStatements()
+	fcmd.addInterpreterStatements()
 	fcmd.Prompt(true)
 }
 
@@ -106,14 +99,14 @@ func (fcmd *pmmpCmdIntpr) InterpretCommand(command string) {
 	//tracer().Debugf("font interpreter: %q\n", command)
 	command = strings.Trim(command, "\x00")
 	//err := fcmd.Eval(command, Formatter{})
-	err := errors.New("command not found")
+	err := fmt.Errorf("command not found: %q", command)
 	if err != nil {
 		_, stderr := fcmd.Outputs()
 		fmt.Fprintf(stderr, "interpreter error: %s\n", err.Error())
 	}
 }
 
-func (fcmd *pmmpCmdIntpr) addSubcmdStatements() {
+func (fcmd *pmmpCmdIntpr) addInterpreterStatements() {
 	// fcmd.AddBuiltinCommands(map[string]interface{}{
 	// 	"show": show,
 	// })
