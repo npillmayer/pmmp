@@ -3,19 +3,18 @@ package grammar
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/npillmayer/gorgo"
 	"github.com/npillmayer/pmmp"
+	"github.com/npillmayer/pmmp/sframe"
 
 	"github.com/npillmayer/gorgo/lr"
 	"github.com/npillmayer/gorgo/lr/earley"
-	"github.com/npillmayer/gorgo/lr/scanner"
 	"github.com/npillmayer/gorgo/lr/sppf"
 	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/gorgo/terex/termr"
-	"github.com/timtadh/lexmachine"
 )
 
 // --- Initialization --------------------------------------------------------
@@ -23,7 +22,8 @@ import (
 var startOnce sync.Once // monitors one-time creation of grammar and lexer
 
 var mpGrammar *lr.LRAnalysis
-var mpLexer *scanner.LMAdapter
+
+//var mpLexer *scanner.LMAdapter
 
 func initGlobalGrammar() {
 	startOnce.Do(func() {
@@ -87,19 +87,15 @@ func MakeMetaPostGrammar(startSymbol string) (*lr.LRAnalysis, error) {
 	return ga, nil
 }
 
-// Parse parses an input string, given in MetaPost language format. It returns the
+// parseStatement parses an input string, given in MetaPost language format. It returns the
 // parse forest and a TokenRetriever, or an error in case of failure.
 //
 // Clients may use a terex.ASTBuilder to create an abstract syntax tree
 // from the parse forest.
 //
-func Parse(input string) (*sppf.Forest, termr.TokenRetriever, error) {
+func parseStatement(lex *lexer, scopes *sframe.ScopeFrameTree) (*sppf.Forest, gorgo.TokenRetriever, error) {
 	parser := createDefaultParser()
-	scan, err := mpLexer.Scanner(input)
-	if err != nil {
-		return nil, nil, err
-	}
-	accept, err := parser.Parse(scan, nil)
+	accept, err := parser.Parse(lex, nil)
 	if err != nil {
 		return nil, nil, err
 	} else if !accept {
@@ -108,8 +104,8 @@ func Parse(input string) (*sppf.Forest, termr.TokenRetriever, error) {
 	return parser.ParseForest(), earleyTokenReceiver(parser), nil
 }
 
-func earleyTokenReceiver(parser *earley.Parser) termr.TokenRetriever {
-	return func(pos uint64) interface{} {
+func earleyTokenReceiver(parser *earley.Parser) gorgo.TokenRetriever {
+	return func(pos uint64) gorgo.Token {
 		return parser.TokenAt(pos)
 	}
 }
@@ -121,7 +117,7 @@ var ErrGrammarNotInitialized = errors.New("MetaPost grammar not initialized")
 // AST creates an abstract syntax tree from a parse tree/forest.
 //
 // Returns a homogenous AST, a TeREx-environment and an error status.
-func AST(parsetree *sppf.Forest, tokRetr termr.TokenRetriever) (*terex.GCons,
+func AST(parsetree *sppf.Forest, tokRetr gorgo.TokenRetriever) (*terex.GCons,
 	*terex.Environment, error) {
 	//
 	// grammar init should have been done already by Parse()
@@ -140,7 +136,7 @@ func AST(parsetree *sppf.Forest, tokRetr termr.TokenRetriever) (*terex.GCons,
 	// return ast, env, nil
 }
 
-func makeAST(g *lr.LRAnalysis, parsetree *sppf.Forest, tokRetr termr.TokenRetriever) (*terex.GCons,
+func makeAST(g *lr.LRAnalysis, parsetree *sppf.Forest, tokRetr gorgo.TokenRetriever) (*terex.GCons,
 	*terex.Environment, error) {
 	//
 	// grammar init should have been done already by parser
@@ -185,32 +181,32 @@ func makeAST(g *lr.LRAnalysis, parsetree *sppf.Forest, tokRetr termr.TokenRetrie
 // NewASTBuilder returns a new AST builder for the MetaPost language
 func newASTBuilder(grammar *lr.Grammar) *termr.ASTBuilder {
 	ab := termr.NewASTBuilder(grammar)
-	ab.AddTermR(atomOp)
-	ab.AddTermR(varOp)
-	ab.AddTermR(suffixOp)
-	ab.AddTermR(subscrOp)
-	ab.AddTermR(primaryOp)
-	ab.AddTermR(secondaryOp)
-	ab.AddTermR(tertiaryOp)
-	ab.AddTermR(exprOp)
-	ab.AddTermR(declOp)
-	ab.AddTermR(declvarOp)
-	ab.AddTermR(declsuffixOp)
-	ab.AddTermR(eqOp)
-	ab.AddTermR(assignOp)
-	ab.AddTermR(transformOp)
-	ab.AddTermR(funcallOp)
-	ab.AddTermR(tertiaryListOp)
-	ab.AddTermR(stmtOp)
-	ab.AddTermR(stmtListOp)
-	ab.AddTermR(basicJoinOp)
-	ab.AddTermR(tensionOp)
-	ab.AddTermR(controlsOp)
-	ab.AddTermR(dirOp)
-	ab.AddTermR(joinOp)
-	ab.AddTermR(pathExprOp)
-	ab.AddTermR(commandOp)
-	ab.AddTermR(drawOptOp)
+	ab.AddRewriter(atomOp.name, atomOp)
+	ab.AddRewriter(varOp.name, varOp)
+	ab.AddRewriter(suffixOp.name, suffixOp)
+	ab.AddRewriter(subscrOp.name, subscrOp)
+	ab.AddRewriter(primaryOp.name, primaryOp)
+	ab.AddRewriter(secondaryOp.name, secondaryOp)
+	ab.AddRewriter(tertiaryOp.name, tertiaryOp)
+	ab.AddRewriter(exprOp.name, exprOp)
+	ab.AddRewriter(declOp.name, declOp)
+	ab.AddRewriter(declvarOp.name, declvarOp)
+	ab.AddRewriter(declsuffixOp.name, declsuffixOp)
+	ab.AddRewriter(eqOp.name, eqOp)
+	ab.AddRewriter(assignOp.name, assignOp)
+	ab.AddRewriter(transformOp.name, transformOp)
+	ab.AddRewriter(funcallOp.name, funcallOp)
+	ab.AddRewriter(tertiaryListOp.name, tertiaryListOp)
+	ab.AddRewriter(stmtOp.name, stmtOp)
+	ab.AddRewriter(stmtListOp.name, stmtListOp)
+	ab.AddRewriter(basicJoinOp.name, basicJoinOp)
+	ab.AddRewriter(tensionOp.name, tensionOp)
+	ab.AddRewriter(controlsOp.name, controlsOp)
+	ab.AddRewriter(dirOp.name, dirOp)
+	ab.AddRewriter(joinOp.name, joinOp)
+	ab.AddRewriter(pathExprOp.name, pathExprOp)
+	ab.AddRewriter(commandOp.name, commandOp)
+	ab.AddRewriter(drawOptOp.name, drawOptOp)
 	return ab
 }
 
@@ -219,7 +215,7 @@ func newASTBuilder(grammar *lr.Grammar) *termr.ASTBuilder {
 // TODO change signature to func(atom) => atom
 // env not needed
 
-func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Element {
+func setTerminalTokenValue(el terex.Element, env *terex.Environment) terex.Element {
 	if !el.IsAtom() {
 		return el
 	}
@@ -227,42 +223,43 @@ func convertTerminalToken(el terex.Element, env *terex.Environment) terex.Elemen
 	if atom.Type() != terex.TokenType {
 		return el
 	}
-	t := atom.Data.(*terex.Token)
-	token := t.Token.(*lexmachine.Token) // TODO this will crash
-	tracer().Infof("Convert terminal token: '%v'", string(token.Lexeme))
-	switch tokType(token.Type) {
-	case tokenTypeFromLexeme["NUMBER"]:
-		lexeme := string(token.Lexeme)
-		if strings.ContainsRune(lexeme, rune('/')) {
-			frac := strings.Split(lexeme, "/")
-			nom, _ := strconv.ParseFloat(frac[0], 64)
-			denom, _ := strconv.ParseFloat(frac[1], 64)
-			t.Value = nom / denom
-		} else if f, err := strconv.ParseFloat(string(token.Lexeme), 64); err == nil {
-			tracer().Debugf("   t.Value=%g", f)
-			t.Value = f
-		} else {
-			tracer().Errorf("   %s", err.Error())
-			return terex.Elem(terex.Atomize(err))
-		}
-	case tokenTypeFromLexeme["STRING"]:
-		if (len(token.Lexeme)) <= 2 {
-			t.Value = ""
-		} else { // trim off "…" ⇒ …
-			t.Value = string(token.Lexeme[1 : len(token.Lexeme)-1])
-		}
+	token := atom.Data.(MPToken)
+	tracer().Infof("setting value of terminal token: '%v'", string(token.Lexeme()))
+	switch token.TokType() {
+	/*
+		case tokenTypeFromLexeme["NUMBER"]:
+			lexeme := string(token.Lexeme)
+			if strings.ContainsRune(lexeme, rune('/')) {
+				frac := strings.Split(lexeme, "/")
+				nom, _ := strconv.ParseFloat(frac[0], 64)
+				denom, _ := strconv.ParseFloat(frac[1], 64)
+				t.Value = nom / denom
+			} else if f, err := strconv.ParseFloat(string(token.Lexeme), 64); err == nil {
+				tracer().Debugf("   t.Value=%g", f)
+				t.Value = f
+			} else {
+				tracer().Errorf("   %s", err.Error())
+				return terex.Elem(terex.Atomize(err))
+			}
+		case tokenTypeFromLexeme["STRING"]:
+			if (len(token.Lexeme)) <= 2 {
+				t.Value = ""
+			} else { // trim off "…" ⇒ …
+				t.Value = string(token.Lexeme[1 : len(token.Lexeme)-1])
+			}
+	*/
 	case tokenTypeFromLexeme["TAG"]: // return []string value, split at '.'
-		tag := string(token.Lexeme)
+		tag := string(token.Lexeme())
 		tags, err := splitTagName(tag)
 		if err != nil {
 			tracer().Errorf("illegal tag name")
-			t.Value = []string{"<illegal tag>"}
+			token.Val = []string{"<illegal tag>"}
 			return el
 		}
-		t.Value = tags
-		tracer().Infof("TAG = %v  ⇒ %v", t.Value, t)
+		token.Val = tags
+		tracer().Infof("TAG = %v  ⇒ %v", token.Value(), token)
 	default:
-		t.Value = string(token.Lexeme)
+		token.Val = string(token.Lexeme())
 	}
 	return el
 }
@@ -292,13 +289,12 @@ func splitTagName(tagname string) ([]string, error) {
 // }
 
 func wrapOpToken(a terex.Atom) terex.Operator {
-	a = convertTerminalToken(terex.Elem(a), nil).AsAtom()
-	if a.Data == nil || a.Data.(*terex.Token).Value == nil {
-		tokname := a.Data.(*terex.Token).Name
-		panic(fmt.Sprintf("value of token '%s' is nil, not operator name", tokname))
+	a = setTerminalTokenValue(terex.Elem(a), nil).AsAtom()
+	if a.Data == nil || a.Data.(MPToken).Value() == nil {
+		panic(fmt.Sprintf("value of token-atom is nil, not an operator name"))
 	}
-	tok := a.Data.(*terex.Token)
-	return pmmp.NewTokenOperator(tok)
+	token := a.Data.(MPToken)
+	return pmmp.NewTokenOperator(token)
 }
 
 // Call delegates the operator call to a symbol in the environment.

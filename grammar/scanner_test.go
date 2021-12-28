@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/npillmayer/gorgo/terex"
+	"github.com/npillmayer/gorgo"
 	"github.com/npillmayer/schuko/tracing/gotestingadapter"
 )
 
@@ -41,7 +41,7 @@ func TestMakeToken(t *testing.T) {
 	for i, x := range []struct {
 		state scstate
 		s     string
-		tok   tokType
+		tok   gorgo.TokType
 	}{
 		{state: accept_symtok, s: "a", tok: SymTok},
 		{state: accept_symtok, s: "blabla", tok: SymTok},
@@ -127,22 +127,22 @@ func TestLexerNextToken(t *testing.T) {
 	defer teardown()
 	//
 	initTokens()
-	var expect = []tokType{
+	var expect = []gorgo.TokType{
 		tokenTypeFromLexeme["begingroup"],
 		SymTok, Type, Unsigned, String, Ident, Ident, Unsigned, PrimaryOp, Join, ';', OfOp,
 	}
 	input := `begingroup @# boolean 1 "hello" a.l 1/23 ** ... ; point % ignored`
 	lex := NewLexer(bufio.NewReader(strings.NewReader(input)))
-	var cats []tokType
+	var cats []gorgo.TokType
 	var lexemes []string
 	for !lex.stream.isEof {
-		cat, token, _, _ := lex.NextToken(nil)
-		t.Logf("cat = %s, token = %v", tokType(cat), token)
-		cats = append(cats, tokType(cat))
+		token := lex.NextToken()
+		t.Logf("token = %v", token)
+		cats = append(cats, token.TokType())
 		if token == nil {
 			lexemes = append(lexemes, "<nil>")
 		} else {
-			lexemes = append(lexemes, token.(terex.Token).Name)
+			lexemes = append(lexemes, token.Lexeme())
 		}
 	}
 	for i, tok := range expect {
@@ -167,9 +167,9 @@ func TestLexerMacroDef(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cat != MacroDef {
-		t.Logf("cat = %s, token = %v", cat.String(), token)
+		t.Logf("token = %v", token)
 		t.Error("unexpected token category")
-		if token.Value != "-> Hello World " {
+		if token.Value() != "-> Hello World " {
 			t.Error("unexpected token lexeme")
 		}
 	}

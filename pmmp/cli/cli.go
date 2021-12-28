@@ -92,12 +92,13 @@ tylot-fonts will interpret the following statements:
 
 type pmmpCmdIntpr struct {
 	*termui.BaseREPL
+	mpPipe io.WriteCloser
 	//*termui.ElvishInterpreter
 }
 
 func (fcmd *pmmpCmdIntpr) InterpretCommand(command string) {
 	//tracer().Debugf("font interpreter: %q\n", command)
-	command = strings.Trim(command, "\x00")
+	command = strings.Trim(command, " \t\x00")
 	//err := fcmd.Eval(command, Formatter{})
 	err := fmt.Errorf("command not found: %q", command)
 	if err != nil {
@@ -110,4 +111,8 @@ func (fcmd *pmmpCmdIntpr) addInterpreterStatements() {
 	// fcmd.AddBuiltinCommands(map[string]interface{}{
 	// 	"show": show,
 	// })
+
+	// TODO
+	// pipe := termui.NewBytePipe()
+	//grammar.Parse(bufio.NewReader(pipe.Reader()))
 }

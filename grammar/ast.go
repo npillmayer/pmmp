@@ -1,6 +1,7 @@
 package grammar
 
 import (
+	"github.com/npillmayer/gorgo"
 	"github.com/npillmayer/gorgo/lr/sppf"
 	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/gorgo/terex/termr"
@@ -18,7 +19,7 @@ type mpTermR struct {
 }
 
 var _ terex.Operator = &mpTermR{}
-var _ termr.TermR = &mpTermR{}
+var _ termr.TermRewriter = &mpTermR{}
 
 func makeASTTermR(name string, opname string) *mpTermR {
 	termr := &mpTermR{
@@ -32,7 +33,7 @@ func (trew *mpTermR) String() string {
 	return trew.name
 }
 
-func (trew *mpTermR) Operator() terex.Operator {
+func (trew *mpTermR) OperatorFor(string) terex.Operator {
 	return trew
 }
 
@@ -83,15 +84,15 @@ var drawOptOp *mpTermR      // for drawing_option -> … productions
 func initRewriters() {
 	atomOp = makeASTTermR("atom", "atom")
 	atomOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
-		// ⟨atom⟩ → ⟨variable⟩ | NUMBER | NullaryOp
+		// ⟨atom⟩ → ⟨variable⟩ | Unsigned | NullaryOp
 		//     | Unsigned ⟨variable⟩
 		//     | begingroup ⟨statement list⟩ ⟨tertiary⟩ endgroup
 		//     | ( ⟨expression⟩ )
 		tracer().Infof("atom tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		if singleArg(l) { // ⟨variable⟩
-			if keywordArg(l) { // NUMBER | NullaryOp
-				convertTerminalToken(terex.Elem(l.Cdar()), env)
+			if keywordArg(l) { // Unsigned | NullaryOp
+				setTerminalTokenValue(terex.Elem(l.Cdar()), env)
 				return terex.Elem(l.Cdar())
 			}
 			return terex.Elem(l.Cdar())
@@ -109,7 +110,7 @@ func initRewriters() {
 		if tokenArg(l) { // Unsigned ⟨variable⟩ ⇒ (* Unsigned ⟨variable⟩ )
 			// invent an ad-hoc multiplication token
 			op := wrapOpToken(terex.Atomize(makeLMToken("PrimaryOp", "*")))
-			prefix := convertTerminalToken(terex.Elem(l.Cdar()), env)
+			prefix := setTerminalTokenValue(terex.Elem(l.Cdar()), env)
 			return terex.Elem(terex.List(op, prefix.AsAtom(), l.Cddar()))
 		}
 		return terex.Elem(l.Cddar()) // ( ⟨expression⟩ ) ⇒ ⟨expression⟩
@@ -146,7 +147,7 @@ func initRewriters() {
 		if singleArg(l) { // ⟨subscript⟩ → NUMBER
 			tracer().Debugf("⟨subscript⟩ → NUMBER ")
 			e := terex.Elem(l.Cdar())
-			e = convertTerminalToken(e, env)
+			e = setTerminalTokenValue(e, env)
 			return terex.Elem(l) // ( ⟨subscript⟩ NUMBER )
 		}
 		tracer().Errorf("⟨subscript⟩ → [ expr ] ")
@@ -180,7 +181,7 @@ func initRewriters() {
 				opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
 				return terex.Elem(terex.Cons(opAtom, l.Cddr())) // UnaryOp ⟨primary⟩
 			}
-			convertTerminalToken(terex.Elem(l.Cdar()), env)
+			setTerminalTokenValue(terex.Elem(l.Cdar()), env)
 			if tokenArgEq(l, '(') {
 				// ⟨primary⟩ → ( ⟨numeric expression⟩ , ⟨numeric expression⟩ )
 				op := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "make-pair")))
@@ -229,8 +230,8 @@ func initRewriters() {
 			return terex.Elem(l.Cdar()) // ⟨tertiary⟩ → ⟨secondary⟩
 		}
 		// ⟨tertiary⟩ SecondaryOp ⟨secondary⟩ ⇒ ( SecondaryOp ⟨tertiary⟩ ⟨secondary⟩ )
-		op := l.Cddar().Data.(*terex.Token)
-		op.Name = "SecondaryOp" // PlusOrMinus ⇒ SecondaryOp
+		//op := l.Cddar().Data.(gorgo.Token)
+		//op.Name = "SecondaryOp" // PlusOrMinus ⇒ SecondaryOp
 		opAtom := terex.Atomize(wrapOpToken(l.Cddar()))
 		c := terex.Cons(opAtom, terex.Cons(l.Cdar(), l.Last()))
 		return terex.Elem(c)
@@ -254,12 +255,12 @@ func initRewriters() {
 		tracer().Infof("declaration tree = ")
 		terex.Elem(l).Dump(tracing.LevelInfo)
 		op := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "vardecl")))
-		convertTerminalToken(terex.Elem(l.Cdar()), env)
+		setTerminalTokenValue(terex.Elem(l.Cdar()), env)
 		c := terex.Cons(terex.Atomize(op), terex.Cons(l.Cdar(), nil))
 		x := l.Cddr()
 		for x != nil { // iterate over rest of list, skipping ','
-			convertTerminalToken(terex.Elem(x.Car), env)
-			if _, ok := x.Car.Data.(*terex.Token); !ok {
+			setTerminalTokenValue(terex.Elem(x.Car), env)
+			if _, ok := x.Car.Data.(gorgo.Token); !ok {
 				//if t.Name != "," {
 				c = c.Append(terex.Cons(x.Car, nil))
 				//}
@@ -295,7 +296,7 @@ func initRewriters() {
 			}
 		}
 		if singleArg(l) { // ⟨generic suffix⟩ → ε TAG | ε []
-			convertTerminalToken(terex.Elem(l.Cdar()), env)
+			setTerminalTokenValue(terex.Elem(l.Cdar()), env)
 			if tokenArgEq(l, int(Ident)) {
 				ll := makeTagSuffixes(terex.Elem(l.Cdar()), env)
 				l = l.Append(ll)
@@ -390,8 +391,8 @@ func initRewriters() {
 	basicJoinOp.rewrite = func(l *terex.GCons, env *terex.Environment) terex.Element {
 		// ⟨basic path join⟩ → .. | ... | .. ⟨tension⟩ .. | .. ⟨controls⟩ ..
 		//opAtom := terex.Atomize(wrapOpToken(l.Cdar()))
-		convertTerminalToken(terex.Elem(l.Cdar()), env)
-		opname := l.Cdar().Data.(*terex.Token).Value.(string)
+		setTerminalTokenValue(terex.Elem(l.Cdar()), env)
+		opname := l.Cdar().Data.(gorgo.Token).Value().(string)
 		t := wrapOpToken(terex.Atomize(makeLMToken("Join", opname)))
 		opAtom := terex.Atomize(t)
 		if singleArg(l) {
@@ -457,8 +458,8 @@ func initRewriters() {
 		// ⟨path join⟩ → --
 		//     | ⟨direction specifier⟩  ⟨basic path join⟩  ⟨direction specifier⟩
 		if singleArg(l) {
-			convertTerminalToken(terex.Elem(l.Cdar()), env)
-			opname := l.Cdar().Data.(*terex.Token).Value.(string)
+			setTerminalTokenValue(terex.Elem(l.Cdar()), env)
+			opname := l.Cdar().Data.(gorgo.Token).Value().(string)
 			t := wrapOpToken(terex.Atomize(makeLMToken("Join", opname)))
 			opAtom := terex.Atomize(t)
 			return terex.Elem(terex.Cons(opAtom, nil))
@@ -495,14 +496,14 @@ func initRewriters() {
 			symtoks := l.Cddr()
 			comma := ","
 			symtoks = symtoks.Drop(func(a terex.Atom) bool {
-				convertTerminalToken(terex.Elem(a), env)
+				setTerminalTokenValue(terex.Elem(a), env)
 				return isToken(a, comma)
 			})
 			x := symtoks
 			for x != nil {
-				t, ok := x.Car.Data.(*terex.Token)
+				t, ok := x.Car.Data.(gorgo.Token)
 				if ok { //isToken(x.Car, "TAG") {
-					if _, ok = t.Value.([]string); ok {
+					if _, ok = t.Value().([]string); ok {
 						//panic("OK")
 						suffixes := makeTagSuffixes(terex.Elem(t), env)
 						p := wrapOpToken(terex.Atomize(makeLMToken("PseudoOp", "TAG")))
@@ -576,10 +577,10 @@ func tokenArg(l *terex.GCons) bool {
 // TokenArgEq is a predicate: is the argument a token equal to tokval?
 func tokenArgEq(l *terex.GCons, tokval int) bool {
 	if l != nil && l.Length() > 1 && l.Cdar().Type() == terex.TokenType {
-		t := l.Cdar().Data.(*terex.Token)
+		t := l.Cdar().Data.(gorgo.Token)
 		tracer().Errorf("t.Value = %v", t.Value)
-		if s, ok := t.Value.(string); ok {
-			return tokenTypeFromLexeme[s] == tokType(tokval)
+		if s, ok := t.Value().(string); ok {
+			return tokenTypeFromLexeme[s] == gorgo.TokType(tokval)
 		}
 	}
 	return false
@@ -587,10 +588,10 @@ func tokenArgEq(l *terex.GCons, tokval int) bool {
 
 func tokenEq(a terex.Atom, tokval int) bool {
 	if a.Type() == terex.TokenType {
-		convertTerminalToken(terex.Elem(a), nil)
-		t := a.Data.(*terex.Token)
-		if s, ok := t.Value.(string); ok {
-			return tokenTypeFromLexeme[s] == tokType(tokval)
+		setTerminalTokenValue(terex.Elem(a), nil)
+		t := a.Data.(gorgo.Token)
+		if s, ok := t.Value().(string); ok {
+			return tokenTypeFromLexeme[s] == gorgo.TokType(tokval)
 		}
 	}
 	return false
@@ -602,8 +603,8 @@ func keywordArg(l *terex.GCons) bool {
 	if !tokenArg(l) {
 		return false
 	}
-	tokname := l.Cdar().Data.(*terex.Token).Name
-	return len(tokname) > 1 // keywords have at least 2 letters
+	lexeme := l.Cdar().Data.(gorgo.Token).Lexeme()
+	return len(lexeme) > 1 // keywords have at least 2 letters
 }
 
 func isSubAST(a terex.Atom, opname string) bool {
@@ -619,9 +620,9 @@ func isToken(a terex.Atom, tcat string) bool {
 		o := a.Data.(terex.Operator)
 		//T().Errorf("o = %v", o)
 		if tok, ok := o.(pmmp.TokenOperator); ok {
-			tracer().Errorf("TOKEN: %v, %s|%s", tok, tok.Opname(), tok.Token().Name)
+			tracer().Errorf("TOKEN: %v, %s|%s", tok, tok.Opname(), tok.Token().Lexeme())
 			tracer().Errorf("TCAT = %s", tcat)
-			if tok.Opname() == tcat || tok.Token().Name == tcat {
+			if tok.Opname() == tcat || tok.Token().Lexeme() == tcat {
 				tracer().Errorf("TOKEN TRUE")
 				return true
 			}
@@ -629,11 +630,11 @@ func isToken(a terex.Atom, tcat string) bool {
 			return true
 		}
 	} else if a.Type() == terex.TokenType {
-		tok := a.Data.(*terex.Token)
-		if tok.Name == tcat {
+		tok := a.Data.(gorgo.Token)
+		if tok.Lexeme() == tcat {
 			return true
 		}
-		if v, ok := tok.Value.(string); ok {
+		if v, ok := tok.Value().(string); ok {
 			if v == tcat {
 				return true
 			}
@@ -658,8 +659,8 @@ func makeTagSuffixes(arg terex.Element, env *terex.Environment) *terex.GCons {
 		panic("cannot make suffixes from non-token tag")
 	}
 	tracer().Infof("TAG = %v", tok) // TAG is []string, e.g. "a.r" ⇒ "a", "r"
-	e := convertTerminalToken(terex.Elem(tok), env)
-	tag := e.AsAtom().Data.(*terex.Token).Value.([]string)
+	e := setTerminalTokenValue(terex.Elem(tok), env)
+	tag := e.AsAtom().Data.(gorgo.Token).Value().([]string)
 	var l *terex.GCons           // create list of suffix nodes, one for each suffix
 	for _, suffix := range tag { // TAG="a.r" ⇒ "a", "r"
 		node := terex.Cons(terex.Atomize(suffixOp), terex.Cons(terex.Atomize(suffix), nil))

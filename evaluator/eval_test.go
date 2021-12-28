@@ -7,6 +7,7 @@ import (
 	"github.com/npillmayer/pmmp"
 	"github.com/npillmayer/pmmp/corelang"
 	"github.com/npillmayer/pmmp/evaluator"
+	"github.com/npillmayer/pmmp/grammar"
 	"github.com/npillmayer/schuko/gtrace"
 	"github.com/npillmayer/schuko/tracing/gotestingadapter"
 )
@@ -71,17 +72,8 @@ type testTok struct {
 }
 
 func wrap(opname string, cat string) terex.Atom {
-	tok := testTok{
-		name:  opname,
-		Value: opname,
-	}
-	t := terex.Token{
-		Name:    cat,
-		TokType: int(terex.OperatorType),
-		Token:   tok,
-		Value:   opname,
-	}
-	return terex.Atomize(pmmp.NewTokenOperator(&t))
+	tok := grammar.MakeMPToken(grammar.SecondaryOp, opname, opname)
+	return terex.Atomize(pmmp.NewTokenOperator(&tok))
 }
 
 func num(f float64) terex.Atom {

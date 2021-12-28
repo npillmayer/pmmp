@@ -14,39 +14,36 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/npillmayer/gorgo/terex"
+	"github.com/npillmayer/gorgo"
 )
 
-type tokType int32
-
-//go:generate stringer -type tokType
 // Token values for operators on different grammar levels
 const (
-	String          tokType = -1
-	Ident           tokType = -2
-	Literal         tokType = -3
-	SymTok          tokType = -9
-	Unsigned        tokType = -10
-	Signed          tokType = -11
-	UnaryOp         tokType = -15
-	NullaryOp       tokType = -16
-	PrimaryOp       tokType = -17
-	SecondaryOp     tokType = -18
-	RelationOp      tokType = -19
-	AssignOp        tokType = -20
-	OfOp            tokType = -21
-	UnaryTransform  tokType = -22
-	BinaryTransform tokType = -23
-	PlusOrMinus     tokType = -24
-	Type            tokType = -25
-	PseudoOp        tokType = -26
-	Function        tokType = -27
-	Join            tokType = -28
-	DrawCmd         tokType = -29
-	DrawOption      tokType = -30
-	ScalarMulOp     tokType = -31
-	MacroDef        tokType = -32
-	Keyword         tokType = -33 // must be the last one => specific keywords will be `Keyword - n`
+	String          gorgo.TokType = -1
+	Ident           gorgo.TokType = -2
+	Literal         gorgo.TokType = -3
+	SymTok          gorgo.TokType = -9
+	Unsigned        gorgo.TokType = -10
+	Signed          gorgo.TokType = -11
+	UnaryOp         gorgo.TokType = -15
+	NullaryOp       gorgo.TokType = -16
+	PrimaryOp       gorgo.TokType = -17
+	SecondaryOp     gorgo.TokType = -18
+	RelationOp      gorgo.TokType = -19
+	AssignOp        gorgo.TokType = -20
+	OfOp            gorgo.TokType = -21
+	UnaryTransform  gorgo.TokType = -22
+	BinaryTransform gorgo.TokType = -23
+	PlusOrMinus     gorgo.TokType = -24
+	Type            gorgo.TokType = -25
+	PseudoOp        gorgo.TokType = -26
+	Function        gorgo.TokType = -27
+	Join            gorgo.TokType = -28
+	DrawCmd         gorgo.TokType = -29
+	DrawOption      gorgo.TokType = -30
+	ScalarMulOp     gorgo.TokType = -31
+	MacroDef        gorgo.TokType = -32
+	Keyword         gorgo.TokType = -33 // must be the last one => specific keywords will be `Keyword - n`
 )
 
 // The tokens representing literal one-char lexemes
@@ -122,13 +119,13 @@ var keywords = []string{ // TODO
 // }
 
 // tokenTypeFromLexeme will be set in initTokens()
-var tokenTypeFromLexeme map[string]tokType // A map from the token names to their int ids
+var tokenTypeFromLexeme map[string]gorgo.TokType // A map from the token names to their int ids
 
 var initOnce sync.Once // monitors one-time initialization
 
 func initTokens() {
 	initOnce.Do(func() {
-		tokenTypeFromLexeme = make(map[string]tokType)
+		tokenTypeFromLexeme = make(map[string]gorgo.TokType)
 		// tokenIds["COMMENT"] = scanner.Comment
 		// tokenIds["TAG"] = scanner.Ident
 		// tokenIds["STRING"] = scanner.String
@@ -155,7 +152,7 @@ func initTokens() {
 		// tokenIds["PseudoOp"] = PseudoOp
 		for _, lit := range literals {
 			r := lit[0]
-			tokenTypeFromLexeme[lit] = tokType(r)
+			tokenTypeFromLexeme[lit] = gorgo.TokType(r)
 		}
 		for _, op := range nullOps {
 			tokenTypeFromLexeme[op] = NullaryOp
@@ -204,14 +201,14 @@ func initTokens() {
 			//tokenIds[unescape(j)] = Join
 		}
 		for i, k := range keywords {
-			tokenTypeFromLexeme[k] = Keyword - tokType(i)
+			tokenTypeFromLexeme[k] = Keyword - gorgo.TokType(i)
 			//tokenIds[unescape(k)] = Keyword - i
 		}
 	})
 }
 
 // Token returns a token name and its token type.
-func Token(t string) (string, tokType) {
+func Token(t string) (string, gorgo.TokType) {
 	id, ok := tokenTypeFromLexeme[t]
 	if !ok {
 		panic(fmt.Errorf("unknown token: %s", t))
@@ -334,7 +331,7 @@ func makeLMToken(tokcat string, lexeme string) *terex.Token {
 	}
 }
 */
-func makeLMToken(tokcat string, lexeme string) *terex.Token {
+func makeLMToken(tokcat string, lexeme string) gorgo.Token {
 	panic("TODO: create tokens during term rewriting")
 }
 

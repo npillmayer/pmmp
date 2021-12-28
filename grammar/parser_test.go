@@ -291,6 +291,7 @@ func parse(input string, acceptable bool, starter string, dot bool, t *testing.T
 	tracing.Select("pmmp.grammar").SetTraceLevel(tracing.LevelInfo)
 	tracing.Select("gorgo.lr").SetTraceLevel(tracing.LevelInfo)
 	//
+	//scopes := sframe.MakeScopeFrame(77)
 	parser, _ := createParser(starter)
 	scan := NewLexer(bufio.NewReader(strings.NewReader(input)))
 	//

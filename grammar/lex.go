@@ -7,7 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/npillmayer/gorgo/terex"
+	"github.com/npillmayer/gorgo"
+	"github.com/npillmayer/gorgo/lr/scanner"
 )
 
 // --- Category codes --------------------------------------------------------
@@ -38,7 +39,8 @@ const (
 var catcodeTable = []string{
 	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", // use unicode.IsLetter
 	`<=>:|≤≠≥`, "`'", `+-`, `/*\`, `!?`, `#&@$`, `^~`, `[`, `]`, `{}`, `.`, `,;()`, `"`,
-	"0123456789", `%`,
+	"0123456789", // use unicod.IsDigit
+	`%`,
 }
 
 func cat(r rune) catcode {
@@ -84,24 +86,50 @@ func (l *lexer) handleError(err error) {
 
 // --- Token -----------------------------------------------------------------
 
-func makeToken(state scstate, lexeme string) (tokType, terex.Token) {
-	// lmtok := &lex.Token{
-	// 	Lexeme: []byte(lexeme),
-	// 	Type:   tokenIds[tokcat],
-	// 	Value:  nil,
-	// }
+// MPToken is the token type we will return to the parser.
+type MPToken struct {
+	kind   gorgo.TokType
+	lexeme string
+	Val    interface{}
+	span   gorgo.Span
+}
+
+func MakeMPToken(typ gorgo.TokType, lexeme string, value interface{}) MPToken {
+	return MPToken{
+		kind:   typ,
+		lexeme: lexeme,
+		Val:    value,
+	}
+}
+
+func (t MPToken) TokType() gorgo.TokType {
+	return t.kind
+}
+
+func (t MPToken) Value() interface{} {
+	return t.Val
+}
+
+func (t MPToken) Lexeme() string {
+	return t.lexeme
+}
+
+func (t MPToken) Span() gorgo.Span {
+	return t.span
+}
+
+func makeToken(state scstate, lexeme string) (gorgo.TokType, gorgo.Token) {
 	toktype := tokval4state[state-accepting_states]
 	if toktype == Ident {
 		if id, ok := tokenTypeFromLexeme[lexeme]; ok {
 			toktype = id
 		}
 	} else if toktype == Literal {
-		toktype = tokType(lexeme[0])
+		toktype = gorgo.TokType(lexeme[0])
 	}
-	return toktype, terex.Token{
-		Name:    lexeme,
-		TokType: int(toktype),
-		Token:   lexeme, // TODO -> need more info?
+	return toktype, MPToken{
+		lexeme: lexeme,
+		kind:   toktype,
 	}
 }
 
@@ -111,18 +139,18 @@ func makeToken(state scstate, lexeme string) (tokType, terex.Token) {
 //     | −
 //     | ⟨‘ ⟨number or fraction⟩ ’ not followed by ‘ ⟨add op⟩  ⟨number⟩ ’⟩
 //
-func numberToken(lexeme string, la rune) (tokType, terex.Token) {
+func numberToken(lexeme string, la rune) (gorgo.TokType, MPToken) {
 	if !unicode.IsLetter(la) {
-		return Unsigned, terex.Token{
-			Name:    lexeme,
-			TokType: int(Unsigned),
-			Value:   unsignedValue(lexeme),
+		return Unsigned, MPToken{
+			lexeme: lexeme,
+			kind:   Unsigned,
+			Val:    unsignedValue(lexeme),
 		}
 	}
-	return ScalarMulOp, terex.Token{
-		Name:    lexeme,
-		TokType: int(ScalarMulOp),
-		Value:   unsignedValue(lexeme),
+	return ScalarMulOp, MPToken{
+		lexeme: lexeme,
+		kind:   ScalarMulOp,
+		Val:    unsignedValue(lexeme),
 	}
 }
 
@@ -155,7 +183,7 @@ func unsignedValue(s string) float64 {
 	return f
 }
 
-func (l *lexer) storeReplacementText() (tokType, terex.Token, error) {
+func (l *lexer) storeReplacementText() (gorgo.TokType, MPToken, error) {
 	// precondition: we just have read a '->'
 	// todo: store text until "enddef" token found
 	l.stream.ResetOutput() // drop the '->'
@@ -185,10 +213,9 @@ func (l *lexer) storeReplacementText() (tokType, terex.Token, error) {
 			}
 		}
 	}
-	return MacroDef, terex.Token{
-		Name:    lexeme,
-		TokType: int(ScalarMulOp),
-		Value:   lexeme,
+	return MacroDef, MPToken{
+		lexeme: lexeme,
+		kind:   ScalarMulOp,
 	}, err
 }
 
@@ -202,9 +229,17 @@ func isEnddef(b []byte) bool {
 	return true
 }
 
-func (l *lexer) NextToken(expected []int) (tokval int, token interface{}, start, length uint64) {
+func eofToken(pos uint64) gorgo.Token {
+	return MPToken{
+		kind: EOF,
+		span: gorgo.Span{pos, pos},
+	}
+}
+
+func (l *lexer) NextToken() (token gorgo.Token) {
 	if l.stream.isEof {
-		return 0, EOF, l.stream.start, l.stream.end
+		//return 0, EOF, l.stream.start, l.stream.end
+		return eofToken(l.stream.start)
 	}
 	var r rune
 	var err error
@@ -213,11 +248,11 @@ func (l *lexer) NextToken(expected []int) (tokval int, token interface{}, start,
 		r, err = l.stream.lookahead()
 		if err != nil && (err != io.EOF || r == 0) {
 			l.handleError(err)
-			return 0, nil, l.stream.end, 0
+			return nil
 		}
 		csq, err = nextCategorySequence(&l.stream, l.state, r)
 		if err != nil && (err != io.EOF || r == 0) {
-			return 0, nil, l.stream.end, 0
+			return nil
 		}
 		newstate := next(l.state, csq)
 		if !mustBacktrack(newstate) && newstate != 0 {
@@ -225,30 +260,28 @@ func (l *lexer) NextToken(expected []int) (tokval int, token interface{}, start,
 		}
 		l.state = newstate
 		if isAccept(newstate) {
-			var t tokType
 			if newstate == accept_fraction_bt || newstate == accept_unsigned_bt {
-				t, token = numberToken(l.stream.OutputString(), r)
+				_, token = numberToken(l.stream.OutputString(), r)
 			} else if newstate == accept_macro_def {
-				if t, token, err = l.storeReplacementText(); err != nil {
+				if _, token, err = l.storeReplacementText(); err != nil {
 					tracer().Errorf("MetaPost syntax error: %s", err)
 					// TODO make token an error token
 					l.handleError(err)
 				}
 			} else {
-				t, token = makeToken(newstate, l.stream.OutputString())
+				_, token = makeToken(newstate, l.stream.OutputString())
 			}
-			tokval = int(t)
-			tracer().Debugf("MetaPost lexer accepting %s", t.String())
+			tracer().Debugf("MetaPost lexer produces :token(%d)", token)
 			l.stream.ResetOutput()
-			return tokval, token, l.stream.start, l.stream.Span()
+			return token
 		}
 	}
 }
 
-type token int
+// ---------------------------------------------------------------------------
 
 const (
-	EOF token = iota
+	EOF = scanner.EOF
 )
 
 type scstate int
@@ -262,43 +295,22 @@ const (
 	state_frac
 	state_denom
 	state_macrodef
-	// state_dash
-	// state_ddash
-	// state_dot
-	// state_ddot
-	// state_equals
-	// state_lt
-	// state_gt
-	// state_ast
 
 	accepting_states // do not change sequence, used as a maker
 	accept_string
-	// accept_unsigned
 	accept_symtok
 	accept_comment
-	// accept_literal
-	// accept_word
-	// accept_dddash
-	// accept_dddot
-	// accept_relop
-	// accept_primop
 	accept_macro_def
 
 	accept_unsigned_bt // do not change sequence
 	accept_fraction_bt
-	// accept_word_bt
-	// accept_symtok_bt
-	// accept_minus_bt
-	// accept_primop_bt
-	// accept_ddash_bt
-	// accept_ddot_bt
 	max_accepting_states // do not change sequence, used as a marker
 
 	state_err // must be last
 )
 
 // callers need to subtract `accepting_states`
-var tokval4state = []tokType{
+var tokval4state = []gorgo.TokType{
 	0, String, Ident, 0, Literal, Join, Join, RelationOp, PrimaryOp, MacroDef,
 	Ident, Unsigned, Unsigned, SymTok, PlusOrMinus, PrimaryOp, Join, Join,
 }

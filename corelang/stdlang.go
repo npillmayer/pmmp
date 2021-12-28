@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/npillmayer/gorgo"
 	"github.com/npillmayer/gorgo/terex"
 	"github.com/npillmayer/pmmp"
 	"github.com/npillmayer/pmmp/evaluator"
@@ -68,14 +69,15 @@ func iserr(e terex.Element) bool {
 }
 
 func setupFrom(e terex.Element, env *terex.Environment) (
-	string, string, *evaluator.Evaluator, *evaluator.Thread) {
+	string, gorgo.Token, *evaluator.Evaluator, *evaluator.Thread) {
+	//
 	eval := evaluator.GetEvaluator(env)
 	th := evaluator.GetThread(env)
 	if e.First().Type() != terex.OperatorType {
 		panic("first element is not an operator")
 	}
 	op := e.First().AsAtom().Data.(pmmp.TokenOperator)
-	return op.Opname(), op.Token().Name, eval, th
+	return op.Opname(), op.Token(), eval, th
 }
 
 func value(e terex.Element) pmmp.Value {
