@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"unicode/utf8"
+
+	"github.com/npillmayer/gorgo"
 )
 
 type runeStream struct {
@@ -21,20 +23,20 @@ func (rs runeStream) OutputString() string {
 
 func (rs *runeStream) ResetOutput() {
 	rs.writer.Reset()
+	rs.start = rs.end
 }
 
-func (rs runeStream) Span() uint64 {
-	return rs.end - rs.start
+func (rs runeStream) Span() gorgo.Span {
+	return gorgo.Span{rs.start, rs.end}
 }
 
 func (rs *runeStream) lookahead() (r rune, err error) {
 	if rs.isEof {
-		return 0, io.EOF
+		return utf8.RuneError, io.EOF
 	}
 	if rs.next != 0 {
 		r = rs.next
 		tracer().Debugf("read LA %#U", r)
-		rs.next = 0
 		return
 	}
 	var sz int
@@ -54,10 +56,16 @@ func (rs *runeStream) lookahead() (r rune, err error) {
 }
 
 func (rs *runeStream) match(r rune) {
+	tracer().Debugf("match %#U", r)
+	if r == utf8.RuneError {
+		panic("EOF matched")
+	}
+	rs.writer.WriteRune(r)
+	s := string(r)
+	rs.end += uint64(len([]byte(s)))
 	if rs.isEof {
 		return
 	}
-	//l.lexeme.WriteRune(r)
 	if rs.next != 0 {
 		rs.next = 0
 		return

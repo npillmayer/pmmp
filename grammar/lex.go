@@ -8,7 +8,6 @@ import (
 	"unicode"
 
 	"github.com/npillmayer/gorgo"
-	"github.com/npillmayer/gorgo/lr/scanner"
 )
 
 // --- Category codes --------------------------------------------------------
@@ -33,6 +32,7 @@ const (
 	cat14                // digit
 	cat15                // %
 	catNL
+	catSpace
 	catErr
 )
 
@@ -40,7 +40,7 @@ var catcodeTable = []string{
 	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", // use unicode.IsLetter
 	`<=>:|≤≠≥`, "`'", `+-`, `/*\`, `!?`, `#&@$`, `^~`, `[`, `]`, `{}`, `.`, `,;()`, `"`,
 	"0123456789", // use unicod.IsDigit
-	`%`,
+	`%`, "\n\r", " ",
 }
 
 func cat(r rune) catcode {
@@ -49,6 +49,9 @@ func cat(r rune) catcode {
 	}
 	if unicode.IsDigit(r) {
 		return cat14
+	}
+	if unicode.IsSpace(r) {
+		return catSpace
 	}
 	for c, cat := range catcodeTable {
 		if strings.ContainsRune(cat, r) {
@@ -63,6 +66,7 @@ func cat(r rune) catcode {
 type lexer struct {
 	state      scstate
 	stream     runeStream
+	csq        catseq
 	errHandler func(error)
 }
 
@@ -119,8 +123,9 @@ func (t MPToken) Span() gorgo.Span {
 }
 
 func makeToken(state scstate, lexeme string) (gorgo.TokType, gorgo.Token) {
+	tracer().Debugf("scanner.makeToken state=%d, lexeme=%q", state, lexeme)
 	toktype := tokval4state[state-accepting_states]
-	if toktype == Ident {
+	if toktype == SymTok {
 		if id, ok := tokenTypeFromLexeme[lexeme]; ok {
 			toktype = id
 		}
@@ -238,51 +243,58 @@ func eofToken(pos uint64) gorgo.Token {
 
 func (l *lexer) NextToken() (token gorgo.Token) {
 	if l.stream.isEof {
-		//return 0, EOF, l.stream.start, l.stream.end
 		return eofToken(l.stream.start)
 	}
-	var r rune
 	var err error
-	var csq catseq
 	for {
-		r, err = l.stream.lookahead()
-		if err != nil && (err != io.EOF || r == 0) {
-			l.handleError(err)
-			return nil
+		if l.csq.l == 0 {
+			l.csq, err = nextCategorySequence(&l.stream)
+			if err != nil && err != io.EOF {
+				// TODO make token an error token
+				l.handleError(err)
+				return nil
+			} else if err == io.EOF {
+				return eofToken(l.stream.start)
+			}
+			tracer().Debugf("scanner category sequence: %v", l.csq)
 		}
-		csq, err = nextCategorySequence(&l.stream, l.state, r)
-		if err != nil && (err != io.EOF || r == 0) {
-			return nil
-		}
-		newstate := next(l.state, csq)
-		if !mustBacktrack(newstate) && newstate != 0 {
-			l.stream.match(r)
+		newstate := next(l.state, l.csq)
+		if !mustBacktrack(newstate) {
+			l.csq.l = 0
 		}
 		l.state = newstate
-		if isAccept(newstate) {
-			if newstate == accept_fraction_bt || newstate == accept_unsigned_bt {
+		tracer().Debugf("scanner new state = %d", newstate)
+		if newstate == accept_skip {
+			l.stream.ResetOutput()
+			l.state = state_start
+		} else if isAccept(newstate) {
+			token = nil
+			if newstate == accept_unsigned || newstate == accept_unsigned_bt {
+				r, _ := l.stream.lookahead()
 				_, token = numberToken(l.stream.OutputString(), r)
+				tracer().Debugf("MetaPost lexer produces :numtoken(%v)", token)
 			} else if newstate == accept_macro_def {
 				if _, token, err = l.storeReplacementText(); err != nil {
 					tracer().Errorf("MetaPost syntax error: %s", err)
 					// TODO make token an error token
 					l.handleError(err)
 				}
+				tracer().Debugf("MetaPost lexer stores macro %v", token)
 			} else {
 				_, token = makeToken(newstate, l.stream.OutputString())
+				tracer().Debugf("MetaPost lexer produces :token(%v)", token)
 			}
-			tracer().Debugf("MetaPost lexer produces :token(%d)", token)
 			l.stream.ResetOutput()
+			l.state = state_start
+			if token == nil {
+				panic("scanner token is nil")
+			}
 			return token
 		}
 	}
 }
 
 // ---------------------------------------------------------------------------
-
-const (
-	EOF = scanner.EOF
-)
 
 type scstate int
 
@@ -297,22 +309,23 @@ const (
 	state_macrodef
 
 	accepting_states // do not change sequence, used as a maker
+	accept_skip
 	accept_string
+	accept_unsigned
 	accept_symtok
-	accept_comment
+	accept_literal
 	accept_macro_def
 
 	accept_unsigned_bt // do not change sequence
-	accept_fraction_bt
+	//accept_fraction_bt
 	max_accepting_states // do not change sequence, used as a marker
 
 	state_err // must be last
 )
 
-// callers need to subtract `accepting_states`
+// callers need to subtract `accepting_states` from the input index.
 var tokval4state = []gorgo.TokType{
-	0, String, Ident, 0, Literal, Join, Join, RelationOp, PrimaryOp, MacroDef,
-	Ident, Unsigned, Unsigned, SymTok, PlusOrMinus, PrimaryOp, Join, Join,
+	0, 0, String, Unsigned, SymTok, Literal, MacroDef, Unsigned, Unsigned,
 }
 
 func mustBacktrack(s scstate) bool {
@@ -334,6 +347,9 @@ func next(s scstate, csq catseq) scstate {
 	}
 	switch s {
 	case state_start:
+		if csq.c == cat11 && csq.l == 1 { // lone single '.' is treated like space
+			return accept_skip
+		}
 		if csq.c <= cat12 {
 			return accept_symtok
 		}
@@ -345,6 +361,7 @@ func next(s scstate, csq catseq) scstate {
 		case cat15: // '%'
 			return state_comment
 		}
+		return accept_skip
 	case state_string:
 		if csq.c == cat13 {
 			return accept_string
@@ -353,38 +370,50 @@ func next(s scstate, csq catseq) scstate {
 		}
 		return state_string
 	case state_num:
-		if csq.c == cat11 { // '.'
+		if csq.c == cat11 && csq.l == 1 { // '.'
 			return state_frac
-		} else if csq.c == cat4 { // '/'
+		} else if csq.c == cat4 && csq.l == 1 { // '/'
 			return state_denom
 		}
 		return accept_unsigned_bt
+	case state_denom, state_frac:
+		if csq.c == cat14 {
+			return accept_unsigned
+		}
+		return state_err
 	case state_comment:
 		if csq.c == catNL {
-			return state_start // ignore comments
+			return accept_skip // ignore comments
 		}
 		return state_comment
 	}
-	panic("unknown scanner state")
+	panic(fmt.Sprintf("unknown scanner state: %d", s))
 }
 
 // nextCategorySequence reads runes from stream as long as each rune has the same
 // category code.
-func nextCategorySequence(stream *runeStream, s scstate, r rune) (csq catseq, err error) {
+func nextCategorySequence(stream *runeStream) (csq catseq, err error) {
+	var r rune
+	r, err = stream.lookahead()
+	if err != nil && err != io.EOF {
+		csq.l = 0
+		return csq, fmt.Errorf("scanner cannot read sequence (%w)", err)
+	}
 	csq.c = cat(r)
 	cc := csq.c
 	if csq.c == cat12 { // cat 12 are loners
+		stream.match(r)
 		csq.l = 1
 		return
 	}
 	for cc == csq.c {
+		stream.match(r)
 		r, err = stream.lookahead()
 		csq.l++
 		if err != nil && (err != io.EOF || r == 0) {
 			return
 		}
 		cc = cat(r)
-		stream.match(r)
 	}
 	return
 }

@@ -15,13 +15,15 @@ import (
 	"sync"
 
 	"github.com/npillmayer/gorgo"
+	"github.com/npillmayer/gorgo/lr/scanner"
 )
 
 // Token values for operators on different grammar levels
 const (
-	String          gorgo.TokType = -1
-	Ident           gorgo.TokType = -2
+	EOF             gorgo.TokType = gorgo.TokType(scanner.EOF)
+	Tag             gorgo.TokType = -2
 	Literal         gorgo.TokType = -3
+	String          gorgo.TokType = -4
 	SymTok          gorgo.TokType = -9
 	Unsigned        gorgo.TokType = -10
 	Signed          gorgo.TokType = -11
