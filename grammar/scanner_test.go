@@ -154,7 +154,7 @@ func TestLexerNextToken(t *testing.T) {
 	initTokens()
 	var expect = []gorgo.TokType{
 		tokenTypeFromLexeme["begingroup"],
-		SymTok, Type, Unsigned, String, Tag, Tag, Unsigned, PrimaryOp, Join, ';', OfOp,
+		Tag, Type, Unsigned, String, Tag, Tag, Unsigned, PrimaryOp, Join, ';', OfOp,
 	}
 	input := `begingroup @# boolean 1 "hello" a.l 1/23 ** ...;point % ignored`
 	lex := NewLexer(bufio.NewReader(strings.NewReader(input)))

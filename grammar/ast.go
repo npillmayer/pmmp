@@ -297,7 +297,7 @@ func initRewriters() {
 		}
 		if singleArg(l) { // ⟨generic suffix⟩ → ε TAG | ε []
 			setTerminalTokenValue(terex.Elem(l.Cdar()), env)
-			if tokenArgEq(l, int(Ident)) {
+			if tokenArgEq(l, int(Tag)) {
 				ll := makeTagSuffixes(terex.Elem(l.Cdar()), env)
 				l = l.Append(ll)
 			} else {

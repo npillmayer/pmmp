@@ -127,7 +127,13 @@ func makeToken(state scstate, lexeme string) (gorgo.TokType, gorgo.Token) {
 	toktype := tokval4state[state-accepting_states]
 	if toktype == SymTok {
 		if id, ok := tokenTypeFromLexeme[lexeme]; ok {
-			toktype = id
+			toktype = id // symbolic token has a pre-defined meaning
+		} else {
+			// TODO lookup in symbol table
+			// if not entry => Tag
+			// if variable => Tag
+			// otherwise => Spark
+			toktype = Tag
 		}
 	} else if toktype == Literal {
 		toktype = gorgo.TokType(lexeme[0])
