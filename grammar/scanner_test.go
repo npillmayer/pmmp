@@ -92,16 +92,16 @@ func TestLexerState(t *testing.T) {
 		next  scstate
 	}{
 		{state: state_start, r: 'a', next: accept_symtok},
-		{state: state_comment, r: '\n', next: state_start},
+		{state: state_comment, r: '\n', next: accept_skip},
 		{state: state_string, r: '\n', next: state_err},
-		{state: state_start, r: '\n', next: state_start},
+		{state: state_start, r: '\n', next: accept_skip},
 	} {
 		csq := catseq{
 			c: cat(test.r),
 			l: 1,
 		}
 		if n := next(test.state, csq); n != test.next {
-			t.Errorf("test %d failed: %d x %U -> %d expected, was %d", i+1, test.state, test.r, test.next, n)
+			t.Errorf("test %d failed: %d x %U -> %d expected, was %d|cat=%d", i+1, test.state, test.r, test.next, n, csq.c)
 		}
 	}
 }

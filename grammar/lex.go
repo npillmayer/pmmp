@@ -40,7 +40,7 @@ var catcodeTable = []string{
 	"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", // use unicode.IsLetter
 	`<=>:|≤≠≥`, "`'", `+-`, `/*\`, `!?`, `#&@$`, `^~`, `[`, `]`, `{}`, `.`, `,;()`, `"`,
 	"0123456789", // use unicod.IsDigit
-	`%`, "\n\r", " ",
+	`%`, "\n\r", " \t",
 }
 
 func cat(r rune) catcode {
@@ -49,9 +49,6 @@ func cat(r rune) catcode {
 	}
 	if unicode.IsDigit(r) {
 		return cat14
-	}
-	if unicode.IsSpace(r) {
-		return catSpace
 	}
 	for c, cat := range catcodeTable {
 		if strings.ContainsRune(cat, r) {

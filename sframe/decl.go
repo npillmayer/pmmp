@@ -1,6 +1,10 @@
 package sframe
 
-import "github.com/npillmayer/gorgo/terex"
+import (
+	"fmt"
+
+	"github.com/npillmayer/gorgo/terex"
+)
 
 type TagType uint8
 
@@ -29,6 +33,7 @@ type TagDeclaration struct {
 	terex.Symbol
 	Kind     TagType
 	prefixes []string
+	arraycnt int
 }
 
 func MakeTagDecl(kind TagType, names ...string) TagDeclaration {
@@ -38,11 +43,20 @@ func MakeTagDecl(kind TagType, names ...string) TagDeclaration {
 	} else {
 		l := len(names)
 		decl.prefixes = make([]string, l)
-		var fullname string = names[l-1]
-		for i := range names[:l-1] {
-			name := names[l-2-i]
-			if name != "[]" {
-				fullname += "."
+		var fullname string
+		for i, name := range names {
+			if name == "[]" || name == "" {
+				if i == 0 {
+					panic("tag declaration must have tag as first component (has array)")
+				}
+				decl.prefixes[i] = "[]"
+				decl.arraycnt++
+				decl.Kind |= TagArray
+			} else {
+				decl.prefixes[i] = name
+				if i > 0 {
+					fullname += "."
+				}
 			}
 			fullname += name
 		}
@@ -57,11 +71,11 @@ func (st TagDeclaration) Name() string {
 }
 
 func (st TagDeclaration) TagType() TagType {
-	return st.Kind
+	return st.Kind & 0x03f
 }
 
 func (st TagDeclaration) IsTag() bool {
-	return st.Kind < Spark
+	return st.TagType() < Spark
 }
 
 func (st TagDeclaration) IsSpark() bool {
@@ -72,19 +86,27 @@ func (st TagDeclaration) IsArray() bool {
 	return (st.Kind & TagArray) > 0
 }
 
+func (st TagDeclaration) Equals(other TagDeclaration) bool {
+	return st.Symbol.Name == other.Symbol.Name
+}
+
 func (st TagType) AsArray() TagType {
 	return st | TagArray
 }
 
 // ---------------------------------------------------------------------------
 
-/*
-type TagDecl interface {
-	Name() string
-	TagType() TagType
+func (st *TagDeclaration) IncarnateVar(indices []float64) Variable {
+	var b TypeBase = MakeTypeBase(st, indices...)
+	switch st.TagType() {
+	case TagNumeric:
+		return Numeric{TypeBase: b}
+	case TagPair:
+		return Pair{TypeBase: b}
+	case TagPath:
+	case TagTransform:
+	case TagString:
+		return String{TypeBase: b}
+	}
+	panic(fmt.Sprintf("not yet implemented: incarnate variable of type %d", st.TagType()))
 }
-
-var _ TagDecl = TagDeclBase{}
-*/
-
-// ---------------------------------------------------------------------------
